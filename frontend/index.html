@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant" data-faction="federation">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05070a" />
+    <title>Gunpla 格價 // Price Recon</title>
+    <script>
+      // Pre-paint faction bootstrap; key must match FACTION_STORAGE_KEY in src/hooks/useFaction.ts
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem('hobbyland:faction');
+        } catch (_) {
+          stored = null;
+        }
+        document.documentElement.dataset.faction = stored === 'zeon' ? 'zeon' : 'federation';
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

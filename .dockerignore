@@ -1,0 +1,9 @@
+.git
+node_modules
+**/node_modules
+**/dist
+data
+*.log
+.env
+docs
+AGENT.md
