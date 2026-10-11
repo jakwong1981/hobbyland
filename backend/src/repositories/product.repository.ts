@@ -6,6 +6,7 @@ import type {
   ImportBatchDto,
   ProductRow,
   ShopCode,
+  ShopImportTimestamp,
 } from '../types/index.js';
 
 interface ProductQueryRow {
@@ -132,6 +133,20 @@ export class ProductRepository {
       skippedCount: r.skipped_count,
       importedAt: r.imported_at,
     }));
+  }
+
+  findLatestImportPerShop(grade?: Grade): ShopImportTimestamp[] {
+    const where = grade ? 'WHERE p.grade = ?' : '';
+    const params = grade ? [grade] : [];
+    const rows = this.db
+      .prepare(
+        `SELECT s.code AS shop_code, MAX(p.imported_at) AS imported_at
+         FROM products p JOIN shops s ON s.id = p.shop_id
+         ${where}
+         GROUP BY s.code`,
+      )
+      .all(...params) as unknown as Array<{ shop_code: string; imported_at: string }>;
+    return rows.map((r) => ({ shopCode: r.shop_code as ShopCode, importedAt: r.imported_at }));
   }
 
   runInTransaction(work: () => void): void {

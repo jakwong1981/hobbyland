@@ -4,9 +4,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CheaperBadge } from '../src/components/CheaperBadge';
 import { ComparisonTable } from '../src/components/ComparisonTable';
+import { FreshnessBar } from '../src/components/FreshnessBar';
 import { GradeTabs } from '../src/components/GradeTabs';
 import { SearchBar } from '../src/components/SearchBar';
-import { buildOffer, buildRow } from './fixtures';
+import { buildFreshness, buildOffer, buildRow } from './fixtures';
 
 describe('CheaperBadge', () => {
   it('shows the cheaper shop with the saving', () => {
@@ -118,6 +119,57 @@ describe('ComparisonTable', () => {
     fireEvent.error(thumb!);
     expect(document.querySelector('img.product-thumb')).toBeNull();
     expect(document.querySelector('.product-thumb-fallback')).not.toBeNull();
+  });
+});
+
+describe('FreshnessBar', () => {
+  it('renders one timestamp per shop with a machine-readable dateTime', () => {
+    render(<FreshnessBar freshness={buildFreshness()} isLoading={false} />);
+
+    expect(screen.getByText(/最後更新 · HG/)).toBeInTheDocument();
+    const times = document.querySelectorAll('time.freshness-time');
+    expect(times).toHaveLength(2);
+    expect(times[0]).toHaveAttribute('dateTime', '2026-10-11T11:46:00.000Z');
+    expect(times[1]).toHaveAttribute('dateTime', '2026-10-11T11:47:00.000Z');
+    expect(screen.getByText('Hobbyland')).toBeInTheDocument();
+    expect(screen.getByText('Animes-Pro')).toBeInTheDocument();
+  });
+
+  it('marks a shop that has never been imported for this grade', () => {
+    render(
+      <FreshnessBar
+        freshness={buildFreshness({
+          overall: '2026-10-11T11:46:00.000Z',
+          byShop: { hobbyland: '2026-10-11T11:46:00.000Z', 'animes-pro': null },
+        })}
+        isLoading={false}
+      />,
+    );
+
+    expect(screen.getByText('冇紀錄')).toBeInTheDocument();
+    expect(document.querySelectorAll('time.freshness-time')).toHaveLength(1);
+  });
+
+  it('reports when the grade has no import history at all', () => {
+    render(
+      <FreshnessBar
+        freshness={buildFreshness({
+          overall: null,
+          byShop: { hobbyland: null, 'animes-pro': null },
+        })}
+        isLoading={false}
+      />,
+    );
+
+    expect(screen.getByText('最後更新 · 呢個級別未有匯入紀錄')).toBeInTheDocument();
+  });
+
+  it('shows a pending state while loading and a failure state when the query errored', () => {
+    const { rerender } = render(<FreshnessBar freshness={undefined} isLoading />);
+    expect(screen.getByText('最後更新 · 載入中…')).toBeInTheDocument();
+
+    rerender(<FreshnessBar freshness={undefined} isLoading={false} />);
+    expect(screen.getByText('最後更新 · 未能載入')).toBeInTheDocument();
   });
 });
 

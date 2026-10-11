@@ -24,7 +24,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 5 | Same SKU in different grades | two separate groups |
 | 6 | Sorting | rows ordered by SKU |
 
-### import.service.test.ts (8 tests)
+### import.service.test.ts (12 tests)
 
 | # | Case | Asserts |
 |---|---|---|
@@ -36,8 +36,12 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 6 | CSV with `image_url` | column mapped through to the stored product |
 | 7 | CSV without `image_url` column | parsed as `null`, stored as `null` (insert path) |
 | 8 | Stale re-import over an imaged row | `image_url` **preserved** via COALESCE, price/stock still updated |
+| 9 | `buildFreshness`, both shops present | per-shop timestamps kept, `overall` = the later one, `grade` echoed |
+| 10 | `buildFreshness`, shops in the other order | `overall` still resolves to the chronologically latest, not the last row |
+| 11 | `buildFreshness`, one shop absent | absent shop → `null`; a `null` grade is passed through |
+| 12 | `buildFreshness`, no rows | `overall = null`, both shops `null` |
 
-### api.test.ts (7 tests, supertest + in-memory DB)
+### api.test.ts (11 tests, supertest + in-memory DB)
 
 | # | Endpoint | Case | Expected |
 |---|---|---|---|
@@ -48,19 +52,25 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 5 | POST /api/import | missing file | 400 |
 | 6 | POST /api/import | CSV with no valid rows | 422 |
 | 7 | GET /api/imports | batch list | 200, 2 batches |
+| 8 | GET /api/imports/freshness | `grade=hg` | 200, both shops non-null, `overall` = later of the two |
+| 9 | GET /api/imports/freshness | `grade=mg` (never imported) | 200, `overall = null`, both shops `null` |
+| 10 | GET /api/imports/freshness | no `grade` | 200, `grade = null`, `overall` non-null |
+| 11 | GET /api/imports/freshness | `grade=pg` (invalid) | 400 + traceId |
 
-### Frontend (`frontend/tests/`, 41 tests)
+### Frontend (`frontend/tests/`, 47 tests)
 
 | File | Cases |
 |---|---|
-| components.test.tsx (17) | `CheaperBadge` (cheaper + saving, tie, single-shop →「只有 Animes 有貨」and never「平」, hobbyland-exclusive, exclusive outranks a tie verdict, none); `ComparisonTable` (empty state, both prices + badge, missing-shop placeholder + exclusive label, regular price only when higher, pre-order flag, preview image rendered, grade placeholder when no image, `onError` → placeholder); `GradeTabs` (selected state, emits grade); `SearchBar` (emits text) |
-| dashboard.test.tsx (6) | api client (unwrap data, `ApiError` on failure, query-string building); `DashboardPage` (default HG load, refetch on grade change, error message) |
+| components.test.tsx (21) | `CheaperBadge` (cheaper + saving, tie, single-shop →「只有 Animes 有貨」and never「平」, hobbyland-exclusive, exclusive outranks a tie verdict, none); `ComparisonTable` (empty state, both prices + badge, missing-shop placeholder + exclusive label, regular price only when higher, pre-order flag, preview image rendered, grade placeholder when no image, `onError` → placeholder); `FreshnessBar` (both shops with `dateTime`, one shop「冇紀錄」, no history at all, loading vs. failed); `GradeTabs` (selected state, emits grade); `SearchBar` (emits text) |
+| dashboard.test.tsx (8) | api client (unwrap data, `ApiError` on failure, query-string building); `DashboardPage` (default HG load, refetch on grade change, freshness requested grade-scoped, **both timestamps rendered on the page**, error message + freshness failure state) |
 | faction.test.tsx (6) | `FactionToggle` (active faction `aria-checked`, emits clicked faction); `useFaction` (federation default + `<html data-faction>`, persist & restore across mounts, unknown stored value → federation); `App` (header toggle flips the document faction) |
 | sort-filter.test.tsx (12) | `useComparisonSort` (incoming order kept while unsorted, title asc/desc, per-shop price asc/desc with the non-carrying shop always last, input array not mutated); `ComparisonTable` (three sortable headers start `aria-sort="none"`, verdict header has no button, click reorders rows + flips `aria-sort`, price header reorders); `ShopFilter` (defaults to `all` with 3 options, emits choice); `DashboardPage` (all-by-default count, filtered `M / N` count with the other shop's rows hidden, filter-specific empty state) |
 
-`fetch` is stubbed per test; `QueryClient` retries are disabled.
+`fetch` is stubbed per test; `QueryClient` retries are disabled. `tests/fixtures.ts` exports
+`stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
+queries, so a single-payload stub would answer the freshness request with a comparison array.
 
-Current status: **backend 21/21, frontend 41/41 passing**; `pnpm build` clean under strict TS.
+Current status: **backend 29/29, frontend 47/47 passing**; `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
@@ -83,10 +93,12 @@ Current status: **backend 21/21, frontend 41/41 passing**; `pnpm build` clean un
 | IT-15 | Frozen header + zebra | IT-01 done, :8080 serving | scroll the 280-row HG grid | column header stays pinned; rows alternate shade | `th` computed `position: sticky`; `.table-wrapper` is the scroll container |
 | IT-16 | Sort + filter on real data | IT-01 done | click 產品 / price headers; pick Hobbyland in 有售舖頭 | rows reorder client-side with no refetch; count becomes `M / N 個 SKU` | sorting a shop's price puts SKUs that shop does not carry last |
 | IT-17 | Preview image sizing | IT-01 done, 682/682 imaged | inspect a row thumbnail | 88px square (60px ≤640px), `object-fit: cover`, no white letterbox | thumbnail box has no padding and a dark `--surface-2` fill |
+| IT-18 | Last-update readout | IT-01 done | `GET /api/imports/freshness?grade=hg` | 200, both shops non-null, `overall` = the later timestamp | dashboard renders two `<time dateTime>` elements above the grid; switching grade refetches |
+| IT-19 | Freshness for an unscraped grade | only HG imported | `GET /api/imports/freshness?grade=rg` | 200, `overall = null`, both shops `null` | readout shows「呢個級別未有匯入紀錄」rather than an HG timestamp |
 
 ## 3. Manual Verification Performed (2026-10-11, re-run after the exclusive-verdict + HUD theme work)
 
-- `pnpm build` clean (backend + frontend, strict TS); `pnpm test` → backend 21/21, frontend 41/41.
+- `pnpm build` clean (backend + frontend, strict TS); `pnpm test` → backend 29/29, frontend 47/47.
 - Re-scraped HG/MG for both shops with the image-aware scraper, then `pnpm import:csv` →
   682 products, **682/682 with an absolute `image_url`** (was 48/682 before the re-scrape).
   All 6 CSVs now carry the `image_url` column at 100% coverage; 0 relative URLs —
@@ -114,6 +126,15 @@ Current status: **backend 21/21, frontend 41/41 passing**; `pnpm build` clean un
   background survives anywhere in the sheet — the only `#fff…` values are the translucent
   zebra (`#ffffff05`) and hover (`#ffffff0f`) fills. JS carries `有售舖頭`, `aria-sort`,
   `localeCompare`, and the filter-specific empty state.
+- IT-18 verified live on :8080 after redeploy: `grade=hg` → both shops
+  `2026-10-11T11:46:10.8xxZ` with `overall` = the later of the two; `mg` and `rg` return their own
+  timestamps (not HG's); no `grade` returns `grade: null` with the global latest; `grade=pg` → 400.
+  `GET /api/imports` still returns 200, so the new sub-path did not shadow it.
+- IT-19's null shape is covered by `api.test.ts` case 9 (MG never imported in that fixture); it was
+  **not** reproduced live, because every grade has been imported on this database.
+- Served bundle re-checked after the freshness work: CSS carries `.freshness*`, `.status-row` and the
+  accent left-border; JS carries the `/api/imports/freshness?grade=` call, the `import-freshness`
+  query key, the `zh-HK` formatter, and all four readout strings.
 
 ## 4. Known Semantic Caveat (not yet changed)
 

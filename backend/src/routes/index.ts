@@ -16,6 +16,7 @@ export function createApiRouter(
   const router = Router();
   router.get('/comparisons', productController.getComparisons);
   router.get('/products', productController.getProducts);
+  router.get('/imports/freshness', productController.getImportFreshness);
   router.get('/imports', productController.getImports);
   router.post('/import', upload.single('file'), importController.postImport);
   return router;

@@ -6,18 +6,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from '../src/App';
 import { FactionToggle } from '../src/components/FactionToggle';
 import { FACTION_STORAGE_KEY, useFaction } from '../src/hooks/useFaction';
+import { stubApi } from './fixtures';
 
 function renderApp(): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ code: 0, message: 'ok', data: [], timestamp: '2026-01-01T00:00:00Z' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    ),
-  );
+  stubApi([]);
   render(
     <QueryClientProvider client={client}>
       <App />

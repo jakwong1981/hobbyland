@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DashboardPage } from '../src/pages/DashboardPage';
 import { ApiError, apiGet } from '../src/api/client';
 import { fetchComparisons } from '../src/api/comparison.api';
-import { buildRow } from './fixtures';
+import { buildFreshness, buildRow, stubApi } from './fixtures';
 
 function jsonResponse(status: number, message: string, data: unknown): Response {
   return new Response(
@@ -49,8 +49,7 @@ describe('api client', () => {
 
 describe('DashboardPage', () => {
   it('loads and shows HG comparisons by default', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, 'ok', [buildRow()]));
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubApi([buildRow()]);
     renderDashboard();
 
     expect(await screen.findByText('HG Gundam')).toBeInTheDocument();
@@ -59,12 +58,43 @@ describe('DashboardPage', () => {
   });
 
   it('refetches when the grade tab changes', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, 'ok', []));
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubApi([]);
     renderDashboard();
 
     await userEvent.click(screen.getByRole('tab', { name: 'MG' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/comparisons?grade=mg'));
+  });
+
+  it('asks for freshness scoped to the current grade', async () => {
+    const fetchMock = stubApi([]);
+    renderDashboard();
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/imports/freshness?grade=hg'),
+    );
+  });
+
+  it('shows the last import time of each shop on the page', async () => {
+    stubApi(
+      [buildRow()],
+      buildFreshness({
+        grade: 'hg',
+        overall: '2026-10-11T11:47:00.000Z',
+        byShop: {
+          hobbyland: '2026-10-11T11:46:00.000Z',
+          'animes-pro': '2026-10-11T11:47:00.000Z',
+        },
+      }),
+    );
+    renderDashboard();
+
+    await screen.findByText('HG Gundam');
+
+    const times = document.querySelectorAll('time.freshness-time');
+    expect(times).toHaveLength(2);
+    expect(times[0]).toHaveAttribute('dateTime', '2026-10-11T11:46:00.000Z');
+    expect(times[1]).toHaveAttribute('dateTime', '2026-10-11T11:47:00.000Z');
+    expect(screen.getByText(/最後更新 · HG/)).toBeInTheDocument();
   });
 
   it('shows an error message when loading fails', async () => {
@@ -72,5 +102,6 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     expect(await screen.findByText('載入失敗：boom')).toBeInTheDocument();
+    expect(await screen.findByText('最後更新 · 未能載入')).toBeInTheDocument();
   });
 });

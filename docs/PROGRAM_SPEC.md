@@ -41,7 +41,9 @@ hobbyland/
 │       ├── hooks/useComparisons.ts              # TanStack Query
 │       ├── hooks/useFaction.ts                  # localStorage ↔ <html data-faction>
 │       ├── hooks/useComparisonSort.ts           # client-side title/price sort, missing shop trails
+│       ├── hooks/useImportFreshness.ts          # last-import timestamp per shop, grade-scoped
 │       ├── components/{GradeTabs,SearchBar,ShopFilter,ComparisonTable,CheaperBadge}.tsx
+│       ├── components/FreshnessBar.tsx                    # last-update readout
 │       ├── components/{FactionCrest,FactionToggle}.tsx   # inline-SVG emblem + theme switch
 │       ├── pages/{DashboardPage,ImportPage}.tsx
 │       └── styles.css           # dark HUD cockpit theme, mobile-first
@@ -71,8 +73,22 @@ Errors are `ApiErrorResponse = { code: <httpStatus>, message, data: null, timest
 |---|---|---|---|
 | GET | `/api/comparisons` | `grade?=hg|mg|rg`, `q?=text`, `cheaper?=hobbyland|animes-pro` | `ComparisonRow[]` |
 | GET | `/api/products` | `shop?`, `grade?`, `q?` | `ProductRow[]` |
+| GET | `/api/imports/freshness` | `grade?=hg|mg|rg` | `ImportFreshness` |
 | GET | `/api/imports` | — | `ImportBatchDto[]` (latest 20) |
 | POST | `/api/import` | multipart: `file` (CSV), fields `shop`, `grade` | `{ batchId, rowCount, skipped }` (201) |
+
+```ts
+ImportFreshness = {
+  grade: Grade | null;                     // null when the query omitted `grade`
+  overall: string | null;                  // ISO-8601; latest across both shops, null if none
+  byShop: Record<ShopCode, string | null>; // per-shop MAX(products.imported_at)
+}
+```
+
+Derived from `products`, not `import_batches`, so it reports what is actually on screen for the
+requested grade: a shop never scraped for RG yields `null` rather than inheriting an HG timestamp.
+`buildFreshness()` in `import.service` is pure; `ProductRepository.findLatestImportPerShop()` owns
+the SQL.
 
 ```ts
 ComparisonRow = {
@@ -100,6 +116,7 @@ extra round trip is made when the user sorts or filters.
 | Search box | `DashboardPage` | refetches (server-side `q` param) |
 | 有售舖頭 select | `DashboardPage` | filters the fetched rows to those whose `offers` include the chosen shop; default `all`. Count reads `N 個 SKU`, or `M / N 個 SKU` while filtered |
 | Column sort | `useComparisonSort` (inside `ComparisonTable`) | `title` and each shop's price are sortable; click cycles asc → desc. `null` sort = the backend's SKU order. A shop that does not carry the SKU has no price and always sorts last, in both directions |
+| Last-update readout | `useImportFreshness` | refetches with the grade; one `<time dateTime>` per shop, 「冇紀錄」for a shop never imported at that grade, and separate loading / failed states |
 
 Sorting is announced through `aria-sort` on the `<th>`, and the clickable region is a real `<button>`
 inside the header cell so it stays keyboard-reachable. The header row is frozen: `.table-wrapper` is

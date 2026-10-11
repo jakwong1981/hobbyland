@@ -101,3 +101,49 @@ describe('GET /api/imports', () => {
     expect(res.body.data).toHaveLength(2);
   });
 });
+
+describe('GET /api/imports/freshness', () => {
+  it('reports the latest import per shop for a grade', async () => {
+    const res = await request(app).get('/api/imports/freshness?grade=hg');
+
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+    const data = res.body.data as {
+      grade: string;
+      overall: string | null;
+      byShop: Record<string, string | null>;
+    };
+    expect(data.grade).toBe('hg');
+    expect(data.byShop.hobbyland).not.toBeNull();
+    expect(data.byShop['animes-pro']).not.toBeNull();
+    expect(data.overall).toBe(
+      [data.byShop.hobbyland, data.byShop['animes-pro']].sort().at(-1),
+    );
+  });
+
+  it('reports nulls for a grade that has never been imported', async () => {
+    const res = await request(app).get('/api/imports/freshness?grade=mg');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      grade: 'mg',
+      overall: null,
+      byShop: { hobbyland: null, 'animes-pro': null },
+    });
+  });
+
+  it('omits the grade scope when no grade is given', async () => {
+    const res = await request(app).get('/api/imports/freshness');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.grade).toBeNull();
+    expect(res.body.data.overall).not.toBeNull();
+  });
+
+  it('rejects an invalid grade', async () => {
+    const res = await request(app).get('/api/imports/freshness?grade=pg');
+
+    expect(res.status).toBe(400);
+    expect(res.body.traceId).toBeDefined();
+  });
+});

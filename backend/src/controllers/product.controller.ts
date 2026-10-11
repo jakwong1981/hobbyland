@@ -3,12 +3,23 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { ProductRepository } from '../repositories/product.repository.js';
 import { buildComparisons } from '../services/comparison.service.js';
-import type { ApiResponse, ComparisonRow, ImportBatchDto, ProductRow } from '../types/index.js';
+import { buildFreshness } from '../services/import.service.js';
+import type {
+  ApiResponse,
+  ComparisonRow,
+  ImportBatchDto,
+  ImportFreshness,
+  ProductRow,
+} from '../types/index.js';
 
 const comparisonQuerySchema = z.object({
   grade: z.enum(['hg', 'mg', 'rg']).optional(),
   q: z.string().trim().max(200).optional(),
   cheaper: z.enum(['hobbyland', 'animes-pro']).optional(),
+});
+
+const freshnessQuerySchema = z.object({
+  grade: z.enum(['hg', 'mg', 'rg']).optional(),
 });
 
 const productQuerySchema = z.object({
@@ -56,5 +67,11 @@ export class ProductController {
 
   getImports = (_req: Request, res: Response): void => {
     ok<ImportBatchDto[]>(res, this.repo.listBatches(20));
+  };
+
+  getImportFreshness = (req: Request, res: Response): void => {
+    const query = freshnessQuerySchema.parse(req.query);
+    const rows = this.repo.findLatestImportPerShop(query.grade);
+    ok<ImportFreshness>(res, buildFreshness(rows, query.grade ?? null));
   };
 }

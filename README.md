@@ -43,6 +43,7 @@ Secondary goals:
 | **Verdict badge** | 「<Shop> 平 HK$N」when both sell it and prices differ, 「同價」when equal, 「只有 <Shop> 有貨」when only one carries it |
 | **Frozen, sortable header** | Column header stays pinned while the grid scrolls; 產品 and both price columns sort asc/desc |
 | **Shop filter** | 有售舖頭 select narrows to the SKUs a given shop carries (default 全部) |
+| **Last-update readout** | Per-shop import timestamp for the grade being viewed, so a stale scrape is visible at a glance |
 | **Grade tabs + search** | HG / MG / RG switch and a title-or-SKU search, both server-side |
 | **CSV import** | Upload through the「匯入」page, or bulk-import a folder via CLI |
 | **Theme** | Dark HUD cockpit skin, switchable between 聯邦 (Federation) and 自護 (Zeon) palettes; the choice persists across reloads |
@@ -219,6 +220,7 @@ A shop delisting a product does **not** delete the row; the last known price per
 | Concern | Owner | Transport |
 |---|---|---|
 | Grade, search text | `DashboardPage` | **Server-side** (`?grade=`, `?q=`) — refetches |
+| Last-update readout | `useImportFreshness` | **Server-side** (`?grade=`) — refetches with the grade |
 | Shop filter, column sort | `DashboardPage` / `useComparisonSort` | **Client-side** — no extra round trip |
 | Faction theme | `useFaction` | `localStorage` → `<html data-faction>` |
 
@@ -261,7 +263,7 @@ Two CSS details that are load-bearing rather than cosmetic:
 corepack enable
 pnpm install
 pnpm build          # type-check + build both packages
-pnpm test           # backend 21 + frontend 41
+pnpm test           # backend 29 + frontend 47
 pnpm dev            # backend :8080 (tsx watch) + frontend :5173 (vite, /api proxied)
 ```
 
@@ -359,8 +361,23 @@ All responses use one envelope:
 |---|---|---|---|
 | `GET` | `/api/comparisons` | `grade?=hg\|mg\|rg`, `q?=text`, `cheaper?=hobbyland\|animes-pro` | `ComparisonRow[]` |
 | `GET` | `/api/products` | `shop?`, `grade?`, `q?` | `ProductRow[]` |
+| `GET` | `/api/imports/freshness` | `grade?=hg\|mg\|rg` | `ImportFreshness` |
 | `GET` | `/api/imports` | — | latest 20 `ImportBatchDto[]` |
 | `POST` | `/api/import` | multipart `file` (CSV) + fields `shop`, `grade` | `{ batchId, rowCount, skipped }` (201) |
+
+```ts
+ImportFreshness = {
+  grade: 'hg' | 'mg' | 'rg' | null,        // null when unscoped
+  overall: string | null,                  // ISO-8601, latest across both shops
+  byShop: { hobbyland: string | null, 'animes-pro': string | null },
+}
+```
+
+Freshness is `MAX(products.imported_at)` grouped by shop, scoped to `grade` when given. It is
+derived from the product rows rather than from `import_batches` so that it reflects what is actually
+on screen for that grade — a shop that has never been scraped for RG reports `null` instead of
+inheriting an HG timestamp. Declared before `/api/imports` in the router; the two paths do not
+overlap, but the specific route is listed first for readability.
 
 Query params are validated with zod; an invalid `grade` is a `400` with field-level messages and a
 `traceId`. Uploads: zero valid rows → `422`, malformed CSV → `400`.
@@ -401,18 +418,18 @@ in-container import.
 ## 10. Testing
 
 ```bash
-pnpm test        # backend 21/21 · frontend 41/41
+pnpm test        # backend 29/29 · frontend 47/47
 ```
 
 | Suite | Environment | Covers |
 |---|---|---|
 | `comparison.service.test.ts` | node | Verdict computation: cheaper + saving, tie, single-shop, `exclusiveShop`, grade separation, SKU ordering |
-| `import.service.test.ts` | node + in-memory SQLite | CSV parsing, validation/skip rules, batch records, upsert idempotency, `image_url` mapping and **preservation** |
-| `api.test.ts` | node + supertest | All four endpoints, status codes, `traceId` on validation failure |
-| `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「平」), preview image and its error fallback, pre-order flag, tabs, search |
+| `import.service.test.ts` | node + in-memory SQLite | CSV parsing, validation/skip rules, batch records, upsert idempotency, `image_url` mapping and **preservation**, `buildFreshness` (per-shop, latest-overall, absent shop → null) |
+| `api.test.ts` | node + supertest | All five endpoints, status codes, `traceId` on validation failure, freshness scoping by grade and the unscoped case |
+| `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (both shops, one shop missing, no history, loading, failed), tabs, search |
 | `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter, filtered counts, filter-specific empty state |
 | `faction.test.tsx` | jsdom + RTL | Theme default, persistence across mounts, `<html data-faction>` mirroring, unknown-value fallback |
-| `dashboard.test.tsx` | jsdom + RTL | API client unwrapping and `ApiError`, query-string building, refetch on grade change, error surfacing |
+| `dashboard.test.tsx` | jsdom + RTL | API client unwrapping and `ApiError`, query-string building, refetch on grade change, the freshness request is grade-scoped and its timestamps render on the page, error surfacing |
 
 The database is a **fresh in-memory SQLite per test** — SQL runs for real rather than being mocked
 away. `fetch` is stubbed per test and React Query retries are disabled.
@@ -448,9 +465,10 @@ frontend/
   src/
     App.tsx                       shell + page switch + theme owner
     pages/                        DashboardPage · ImportPage
-    components/                   ComparisonTable · CheaperBadge · ShopFilter ·
+    components/                   ComparisonTable · CheaperBadge · ShopFilter · FreshnessBar ·
                                   GradeTabs · SearchBar · FactionToggle · FactionCrest
-    hooks/                        useComparisons · useComparisonSort · useFaction
+    hooks/                        useComparisons · useComparisonSort · useFaction ·
+                                  useImportFreshness
     api/                          client · comparison.api · import.api
     types/index.ts                mirrors backend DTOs (+ frontend-only types)
     styles.css                    dark HUD theme, mobile-first

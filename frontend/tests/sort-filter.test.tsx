@@ -8,7 +8,7 @@ import { ShopFilter } from '../src/components/ShopFilter';
 import { DashboardPage } from '../src/pages/DashboardPage';
 import { useComparisonSort } from '../src/hooks/useComparisonSort';
 import type { ComparisonRow } from '../src/types';
-import { buildOffer, buildRow } from './fixtures';
+import { buildOffer, buildRow, stubApi } from './fixtures';
 
 // Alpha is sold by both shops; Beta is hobbyland-only; Gamma is animes-only.
 const ALPHA = buildRow({
@@ -42,18 +42,6 @@ const ROWS: ComparisonRow[] = [ALPHA, BETA, GAMMA];
 
 function renderedTitles(): Array<string | null> {
   return [...document.querySelectorAll('.product-title')].map((n) => n.textContent);
-}
-
-function stubComparisons(rows: ComparisonRow[]): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ code: 0, message: 'ok', data: rows, timestamp: '2026-01-01T00:00:00Z' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    ),
-  );
 }
 
 function renderDashboard(): void {
@@ -171,14 +159,14 @@ describe('ShopFilter', () => {
 
 describe('DashboardPage shop filter', () => {
   it('shows every sku by default', async () => {
-    stubComparisons(ROWS);
+    stubApi(ROWS);
     renderDashboard();
     expect(await screen.findByText('Alpha')).toBeInTheDocument();
     expect(screen.getByText('3 個 SKU')).toBeInTheDocument();
   });
 
   it('narrows to the skus a shop carries and reports the filtered count', async () => {
-    stubComparisons(ROWS);
+    stubApi(ROWS);
     renderDashboard();
     await screen.findByText('Alpha');
 
@@ -190,7 +178,7 @@ describe('DashboardPage shop filter', () => {
   });
 
   it('shows a filter-specific empty state when no sku matches', async () => {
-    stubComparisons([BETA]);
+    stubApi([BETA]);
     renderDashboard();
     await screen.findByText('Beta');
 

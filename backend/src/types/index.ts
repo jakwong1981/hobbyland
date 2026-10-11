@@ -79,3 +79,14 @@ export interface ImportBatchDto {
   skippedCount: number;
   importedAt: string;
 }
+
+export interface ShopImportTimestamp {
+  shopCode: ShopCode;
+  importedAt: string;
+}
+
+export interface ImportFreshness {
+  grade: Grade | null;
+  overall: string | null;
+  byShop: Record<ShopCode, string | null>;
+}

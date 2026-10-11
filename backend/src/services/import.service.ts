@@ -1,8 +1,17 @@
 // backend/src/services/import.service.ts
 import { parse } from 'csv-parse/sync';
-import type { CsvProductRecord, Grade, ImportResult, ShopCode } from '../types/index.js';
+import type {
+  CsvProductRecord,
+  Grade,
+  ImportFreshness,
+  ImportResult,
+  ShopCode,
+  ShopImportTimestamp,
+} from '../types/index.js';
 import type { ProductRepository } from '../repositories/product.repository.js';
 import { AppError } from '../utils/app-error.js';
+
+const SHOPS: readonly ShopCode[] = ['hobbyland', 'animes-pro'];
 
 interface RawCsvRow {
   title?: string;
@@ -58,6 +67,18 @@ export function importProducts(
     }
   });
   return { batchId, rowCount: records.length, skipped };
+}
+
+export function buildFreshness(rows: ShopImportTimestamp[], grade: Grade | null): ImportFreshness {
+  const byShop: Record<ShopCode, string | null> = { hobbyland: null, 'animes-pro': null };
+  for (const row of rows) {
+    byShop[row.shopCode] = row.importedAt;
+  }
+  // ISO-8601 timestamps sort lexicographically in chronological order.
+  const stamps = SHOPS.map((shop) => byShop[shop])
+    .filter((stamp): stamp is string => stamp !== null)
+    .sort();
+  return { grade, overall: stamps.at(-1) ?? null, byShop };
 }
 
 function toRecord(row: RawCsvRow): CsvProductRecord | null {

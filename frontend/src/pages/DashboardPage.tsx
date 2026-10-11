@@ -3,8 +3,10 @@ import { useMemo, useState } from 'react';
 import { GradeTabs } from '../components/GradeTabs';
 import { SearchBar } from '../components/SearchBar';
 import { ShopFilter } from '../components/ShopFilter';
+import { FreshnessBar } from '../components/FreshnessBar';
 import { ComparisonTable } from '../components/ComparisonTable';
 import { useComparisons } from '../hooks/useComparisons';
+import { useImportFreshness } from '../hooks/useImportFreshness';
 import type { Grade, ShopFilterValue } from '../types';
 
 export function DashboardPage() {
@@ -15,6 +17,7 @@ export function DashboardPage() {
     grade,
     ...(q.trim() ? { q: q.trim() } : {}),
   });
+  const { data: freshness, isLoading: isFreshnessLoading } = useImportFreshness(grade);
 
   const visible = useMemo(() => {
     const rows = data ?? [];
@@ -28,8 +31,11 @@ export function DashboardPage() {
         <ShopFilter value={shop} onChange={setShop} />
         <SearchBar value={q} onChange={setQ} />
       </div>
-      {isLoading && <p className="status">載入中…</p>}
-      {isError && <p className="status error">載入失敗：{error.message}</p>}
+      <div className="status-row">
+        {isLoading && <p className="status">載入中…</p>}
+        {isError && <p className="status error">載入失敗：{error.message}</p>}
+        <FreshnessBar freshness={freshness} isLoading={isFreshnessLoading} />
+      </div>
       {data && (
         <>
           <p className="result-count">

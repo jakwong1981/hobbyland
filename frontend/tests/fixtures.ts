@@ -1,5 +1,6 @@
 // frontend/tests/fixtures.ts
-import type { ComparisonRow, Offer } from '../src/types';
+import { vi, type Mock } from 'vitest';
+import type { ComparisonRow, ImportFreshness, Offer } from '../src/types';
 
 export function buildOffer(overrides: Partial<Offer> = {}): Offer {
   return {
@@ -28,4 +29,37 @@ export function buildRow(overrides: Partial<ComparisonRow> = {}): ComparisonRow 
     exclusiveShop: null,
     ...overrides,
   };
+}
+
+export function buildFreshness(overrides: Partial<ImportFreshness> = {}): ImportFreshness {
+  return {
+    grade: 'hg',
+    overall: '2026-10-11T11:47:00.000Z',
+    byShop: {
+      hobbyland: '2026-10-11T11:46:00.000Z',
+      'animes-pro': '2026-10-11T11:47:00.000Z',
+    },
+    ...overrides,
+  };
+}
+
+function envelope(data: unknown): Response {
+  return new Response(
+    JSON.stringify({ code: 0, message: 'ok', data, timestamp: '2026-01-01T00:00:00Z' }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+// The dashboard issues two queries, so the stub must route on the requested URL
+// instead of answering every path with the comparison payload.
+export function stubApi(
+  comparisons: ComparisonRow[],
+  freshness: ImportFreshness = buildFreshness(),
+): Mock {
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const data = String(input).includes('/api/imports/freshness') ? freshness : comparisons;
+    return Promise.resolve(envelope(data));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }

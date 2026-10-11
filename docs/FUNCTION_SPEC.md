@@ -13,6 +13,10 @@
 3. Dashboard queries `/api/comparisons`; the backend joins both shops' products, groups by
    `(grade, sku)`, and computes the cheaper shop, the saving, and whether only one shop carries the
    SKU. The UI badges the verdict —「<Shop> 平 HK$N」,「同價」, or「只有 <Shop> 有貨」.
+4. Dashboard also queries `/api/imports/freshness?grade=` and shows one last-import timestamp per
+   shop above the grid. The two shops are scraped independently and drift apart, so freshness is
+   reported per shop rather than as a single global number — a stale half of the comparison should
+   be visible without inspecting the CSVs.
 
 ## 2. Validation Rules
 

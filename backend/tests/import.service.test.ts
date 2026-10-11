@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryDatabase } from '../src/db/client.js';
 import { ProductRepository } from '../src/repositories/product.repository.js';
-import { importProducts, parseProductCsv } from '../src/services/import.service.js';
+import { buildFreshness, importProducts, parseProductCsv } from '../src/services/import.service.js';
 
 const HEADER = 'title,price,url,regular_price,sku,stock,sell_type';
 
@@ -110,5 +110,56 @@ describe('importProducts', () => {
     expect(product.imageUrl).toBe('https://static.example/pic1.jpeg');
     expect(product.price).toBe(88);
     expect(product.stock).toBe('3');
+  });
+});
+
+describe('buildFreshness', () => {
+  it('reports each shop separately and takes the latest as overall', () => {
+    const freshness = buildFreshness(
+      [
+        { shopCode: 'hobbyland', importedAt: '2026-10-11T09:00:00.000Z' },
+        { shopCode: 'animes-pro', importedAt: '2026-10-11T11:00:00.000Z' },
+      ],
+      'hg',
+    );
+
+    expect(freshness).toEqual({
+      grade: 'hg',
+      overall: '2026-10-11T11:00:00.000Z',
+      byShop: {
+        hobbyland: '2026-10-11T09:00:00.000Z',
+        'animes-pro': '2026-10-11T11:00:00.000Z',
+      },
+    });
+  });
+
+  it('picks the earlier shop as overall when it was imported last', () => {
+    const freshness = buildFreshness(
+      [
+        { shopCode: 'hobbyland', importedAt: '2026-10-11T17:00:00.000Z' },
+        { shopCode: 'animes-pro', importedAt: '2026-10-11T09:00:00.000Z' },
+      ],
+      'rg',
+    );
+
+    expect(freshness.overall).toBe('2026-10-11T17:00:00.000Z');
+  });
+
+  it('leaves a shop with no rows as null', () => {
+    const freshness = buildFreshness(
+      [{ shopCode: 'hobbyland', importedAt: '2026-10-11T09:00:00.000Z' }],
+      null,
+    );
+
+    expect(freshness.grade).toBeNull();
+    expect(freshness.byShop['animes-pro']).toBeNull();
+    expect(freshness.overall).toBe('2026-10-11T09:00:00.000Z');
+  });
+
+  it('reports a null overall when nothing has been imported', () => {
+    const freshness = buildFreshness([], 'mg');
+
+    expect(freshness.overall).toBeNull();
+    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null });
   });
 });

@@ -45,3 +45,9 @@ export interface ImportResult {
   rowCount: number;
   skipped: number;
 }
+
+export interface ImportFreshness {
+  grade: Grade | null;
+  overall: string | null;
+  byShop: Record<ShopCode, string | null>;
+}

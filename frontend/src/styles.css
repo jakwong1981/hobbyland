@@ -393,6 +393,70 @@ nav {
   color: var(--success);
 }
 
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.status-row .status,
+.status-row .freshness {
+  margin: 0;
+}
+
+.status-row .freshness {
+  margin-left: auto;
+}
+
+.freshness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-solid);
+  clip-path: var(--clip-chip);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.freshness-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.freshness-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.freshness-item + .freshness-item {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.freshness-shop {
+  color: var(--text-dim);
+}
+
+.freshness-time {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.freshness-none {
+  color: var(--text-dim);
+}
+
 .empty-state {
   padding: 28px 0;
   text-align: center;
@@ -779,6 +843,11 @@ th[aria-sort="descending"] .sort-indicator {
 
   .toolbar {
     gap: 10px;
+  }
+
+  .status-row .freshness {
+    margin-left: 0;
+    width: 100%;
   }
 
   .shop-filter {

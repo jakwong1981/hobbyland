@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { uploadCsv } from '../api/import.api';
+import { IMPORT_FRESHNESS_KEY } from '../hooks/useImportFreshness';
 import type { Grade, ImportResult, ShopCode } from '../types';
 
 export function ImportPage() {
@@ -22,7 +23,10 @@ export function ImportPage() {
     try {
       const res = await uploadCsv(shop, grade, file);
       setResult(res);
-      await queryClient.invalidateQueries({ queryKey: ['comparisons'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['comparisons'] }),
+        queryClient.invalidateQueries({ queryKey: [IMPORT_FRESHNESS_KEY] }),
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : '匯入失敗');
     } finally {
