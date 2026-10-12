@@ -36,4 +36,5 @@ CREATE INDEX IF NOT EXISTS idx_products_grade ON products(grade);
 
 INSERT OR IGNORE INTO shops (code, name) VALUES
   ('hobbyland', 'Hobbyland'),
-  ('animes-pro', 'Animes-Pro');
+  ('animes-pro', 'Animes-Pro'),
+  ('hobbydigi', 'HobbyDigi');

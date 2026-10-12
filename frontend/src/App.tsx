@@ -5,6 +5,8 @@ import { ImportPage } from './pages/ImportPage';
 import { FactionCrest } from './components/FactionCrest';
 import { FactionToggle } from './components/FactionToggle';
 import { useFaction } from './hooks/useFaction';
+import { SHOP_CODES } from './types';
+import { SHOP_LABEL } from './shops';
 
 type Page = 'dashboard' | 'import';
 
@@ -19,7 +21,9 @@ export default function App() {
           <FactionCrest faction={faction} />
           <div className="brand-text">
             <h1>Gunpla 格價</h1>
-            <p className="brand-sub">Price Recon // Hobbyland × Animes-Pro</p>
+            <p className="brand-sub">
+              Price Recon // {SHOP_CODES.map((shop) => SHOP_LABEL[shop]).join(' × ')}
+            </p>
           </div>
         </div>
         <div className="header-controls">

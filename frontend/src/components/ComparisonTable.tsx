@@ -1,13 +1,16 @@
 // frontend/src/components/ComparisonTable.tsx
 import { useState } from 'react';
-import type { ComparisonRow, Offer, ShopCode, SortKey, SortState } from '../types';
+import {
+  SHOP_CODES,
+  type ComparisonRow,
+  type Offer,
+  type ShopCode,
+  type SortKey,
+  type SortState,
+} from '../types';
+import { SHOP_LABEL, SHOP_TONE } from '../shops';
 import { useComparisonSort } from '../hooks/useComparisonSort';
 import { CheaperBadge } from './CheaperBadge';
-
-const SHOP_TONE: Record<ShopCode, string> = {
-  'hobbyland': 'shop-a',
-  'animes-pro': 'shop-b',
-};
 
 const SORT_GLYPH = { none: '◇', asc: '▲', desc: '▼' } as const;
 
@@ -67,8 +70,13 @@ function OfferCell({ offer, shop }: { offer: Offer | undefined; shop: ShopCode }
 }
 
 function rowImageUrl(row: ComparisonRow): string | null {
-  const hobbyland = row.offers.find((o) => o.shop === 'hobbyland' && o.imageUrl);
-  return hobbyland?.imageUrl ?? row.offers.find((o) => o.imageUrl)?.imageUrl ?? null;
+  // SHOP_CODES order doubles as the preference order: the first shop that has a
+  // photo for this kit supplies the thumbnail.
+  for (const shop of SHOP_CODES) {
+    const imageUrl = row.offers.find((o) => o.shop === shop)?.imageUrl;
+    if (imageUrl) return imageUrl;
+  }
+  return null;
 }
 
 function findOffer(row: ComparisonRow, shop: ShopCode): Offer | undefined {
@@ -132,22 +140,17 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
               onSort={toggleSort}
               className="title-head"
             />
-            <SortableHeader
-              label="Hobbyland"
-              code="SHOP-01 · 價錢"
-              sortKey="hobbyland"
-              sort={sort}
-              onSort={toggleSort}
-              className={`shop-head ${SHOP_TONE['hobbyland']}`}
-            />
-            <SortableHeader
-              label="Animes-Pro"
-              code="SHOP-02 · 價錢"
-              sortKey="animes-pro"
-              sort={sort}
-              onSort={toggleSort}
-              className={`shop-head ${SHOP_TONE['animes-pro']}`}
-            />
+            {SHOP_CODES.map((shop, index) => (
+              <SortableHeader
+                key={shop}
+                label={SHOP_LABEL[shop]}
+                code={`SHOP-${String(index + 1).padStart(2, '0')} · 價錢`}
+                sortKey={shop}
+                sort={sort}
+                onSort={toggleSort}
+                className={`shop-head ${SHOP_TONE[shop]}`}
+              />
+            ))}
             <th scope="col" className="verdict-head">
               判定<span className="th-code">VERDICT</span>
             </th>
@@ -157,8 +160,9 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
           {sorted.map((row) => (
             <tr key={`${row.grade}-${row.sku}`}>
               <TitleCell row={row} />
-              <OfferCell offer={findOffer(row, 'hobbyland')} shop="hobbyland" />
-              <OfferCell offer={findOffer(row, 'animes-pro')} shop="animes-pro" />
+              {SHOP_CODES.map((shop) => (
+                <OfferCell key={shop} offer={findOffer(row, shop)} shop={shop} />
+              ))}
               <td className="badge-cell">
                 <CheaperBadge
                   cheapestShop={row.cheapestShop}

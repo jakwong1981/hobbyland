@@ -1,17 +1,16 @@
 // backend/src/services/import.service.ts
 import { parse } from 'csv-parse/sync';
-import type {
-  CsvProductRecord,
-  Grade,
-  ImportFreshness,
-  ImportResult,
-  ShopCode,
-  ShopImportTimestamp,
+import {
+  SHOP_CODES,
+  type CsvProductRecord,
+  type Grade,
+  type ImportFreshness,
+  type ImportResult,
+  type ShopCode,
+  type ShopImportTimestamp,
 } from '../types/index.js';
 import type { ProductRepository } from '../repositories/product.repository.js';
 import { AppError } from '../utils/app-error.js';
-
-const SHOPS: readonly ShopCode[] = ['hobbyland', 'animes-pro'];
 
 interface RawCsvRow {
   title?: string;
@@ -70,12 +69,18 @@ export function importProducts(
 }
 
 export function buildFreshness(rows: ShopImportTimestamp[], grade: Grade | null): ImportFreshness {
-  const byShop: Record<ShopCode, string | null> = { hobbyland: null, 'animes-pro': null };
+  const byShop = Object.fromEntries(SHOP_CODES.map((shop) => [shop, null])) as Record<
+    ShopCode,
+    string | null
+  >;
   for (const row of rows) {
     byShop[row.shopCode] = row.importedAt;
   }
-  // ISO-8601 timestamps sort lexicographically in chronological order.
-  const stamps = SHOPS.map((shop) => byShop[shop])
+  // ISO-8601 timestamps sort lexicographically in chronological order. Reading
+  // the populated map rather than iterating a shop list is what keeps `overall`
+  // honest: the old form silently dropped any timestamp whose shop was not in
+  // that list, so a shop could be imported and still not count towards "latest".
+  const stamps = Object.values(byShop)
     .filter((stamp): stamp is string => stamp !== null)
     .sort();
   return { grade, overall: stamps.at(-1) ?? null, byShop };

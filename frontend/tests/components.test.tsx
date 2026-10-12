@@ -133,6 +133,9 @@ describe('FreshnessBar', () => {
     expect(times[1]).toHaveAttribute('dateTime', '2026-10-11T11:47:00.000Z');
     expect(screen.getByText('Hobbyland')).toBeInTheDocument();
     expect(screen.getByText('Animes-Pro')).toBeInTheDocument();
+    // The third shop is listed even though it has never been imported.
+    expect(screen.getByText('HobbyDigi')).toBeInTheDocument();
+    expect(screen.getByText('冇紀錄')).toBeInTheDocument();
   });
 
   it('marks a shop that has never been imported for this grade', () => {
@@ -140,13 +143,13 @@ describe('FreshnessBar', () => {
       <FreshnessBar
         freshness={buildFreshness({
           overall: '2026-10-11T11:46:00.000Z',
-          byShop: { hobbyland: '2026-10-11T11:46:00.000Z', 'animes-pro': null },
+          byShop: { hobbyland: '2026-10-11T11:46:00.000Z', 'animes-pro': null, hobbydigi: null },
         })}
         isLoading={false}
       />,
     );
 
-    expect(screen.getByText('冇紀錄')).toBeInTheDocument();
+    expect(screen.getAllByText('冇紀錄')).toHaveLength(2);
     expect(document.querySelectorAll('time.freshness-time')).toHaveLength(1);
   });
 
@@ -155,7 +158,7 @@ describe('FreshnessBar', () => {
       <FreshnessBar
         freshness={buildFreshness({
           overall: null,
-          byShop: { hobbyland: null, 'animes-pro': null },
+          byShop: { hobbyland: null, 'animes-pro': null, hobbydigi: null },
         })}
         isLoading={false}
       />,

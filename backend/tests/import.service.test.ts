@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createInMemoryDatabase } from '../src/db/client.js';
 import { ProductRepository } from '../src/repositories/product.repository.js';
 import { buildFreshness, importProducts, parseProductCsv } from '../src/services/import.service.js';
+import type { ShopCode } from '../src/types/index.js';
 
 const HEADER = 'title,price,url,regular_price,sku,stock,sell_type';
 
@@ -129,6 +130,7 @@ describe('buildFreshness', () => {
       byShop: {
         hobbyland: '2026-10-11T09:00:00.000Z',
         'animes-pro': '2026-10-11T11:00:00.000Z',
+        hobbydigi: null,
       },
     });
   });
@@ -160,6 +162,23 @@ describe('buildFreshness', () => {
     const freshness = buildFreshness([], 'mg');
 
     expect(freshness.overall).toBeNull();
-    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null });
+    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null, hobbydigi: null });
+  });
+
+  it('counts a shop the union does not know about towards overall', () => {
+    // mapProductRow casts the database's shop_code without checking it, so a
+    // shop present in the `shops` table but not yet in SHOP_CODES reaches here
+    // at runtime. Deriving `overall` from the populated map keeps the readout
+    // honest; iterating a hardcoded shop list reported a stale time instead.
+    const unknownShop = 'hobbydigi' as ShopCode;
+    const freshness = buildFreshness(
+      [
+        { shopCode: 'hobbyland', importedAt: '2026-10-01T09:00:00.000Z' },
+        { shopCode: unknownShop, importedAt: '2026-10-09T09:00:00.000Z' },
+      ],
+      'hg',
+    );
+
+    expect(freshness.overall).toBe('2026-10-09T09:00:00.000Z');
   });
 });

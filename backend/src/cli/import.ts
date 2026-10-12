@@ -5,10 +5,13 @@ import { loadConfig } from '../config.js';
 import { createDatabase } from '../db/client.js';
 import { ProductRepository } from '../repositories/product.repository.js';
 import { importProducts, parseProductCsv } from '../services/import.service.js';
-import type { Grade, ShopCode } from '../types/index.js';
+import { GRADES, SHOP_CODES, type Grade, type ShopCode } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
-const FILE_PATTERN = /^(hobbyland|animes-pro)_(hg|mg|rg)\.csv$/;
+// Derived from the same constants that type `ShopCode` and `Grade`, so a shop
+// added to SHOP_CODES is recognised here without a second edit. Shop codes are
+// plain lowercase words and hyphens, which need no escaping in an alternation.
+const FILE_PATTERN = new RegExp(`^(${SHOP_CODES.join('|')})_(${GRADES.join('|')})\\.csv$`);
 
 interface CliArgs {
   dir?: string;
@@ -48,7 +51,7 @@ function main(): void {
   if (files.length === 0) {
     logger.error(
       { dir: args.dir ?? null },
-      'no CSV files matched — set CSV_DIR or pass --dir <folder> / --file <path> (expected hobbyland_<grade>.csv / animes-pro_<grade>.csv)',
+      `no CSV files matched — set CSV_DIR or pass --dir <folder> / --file <path> (expected <shop>_<grade>.csv; shops: ${SHOP_CODES.join(', ')}, grades: ${GRADES.join(', ')})`,
     );
     process.exit(1);
   }

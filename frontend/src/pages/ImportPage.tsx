@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { uploadCsv } from '../api/import.api';
 import { IMPORT_FRESHNESS_KEY } from '../hooks/useImportFreshness';
-import type { Grade, ImportResult, ShopCode } from '../types';
+import { GRADES, SHOP_CODES, type Grade, type ImportResult, type ShopCode } from '../types';
+import { SHOP_LABEL } from '../shops';
 
 export function ImportPage() {
   const queryClient = useQueryClient();
@@ -41,16 +42,21 @@ export function ImportPage() {
         <label>
           網店
           <select value={shop} onChange={(e) => setShop(e.target.value as ShopCode)}>
-            <option value="hobbyland">Hobbyland</option>
-            <option value="animes-pro">Animes-Pro</option>
+            {SHOP_CODES.map((code) => (
+              <option key={code} value={code}>
+                {SHOP_LABEL[code]}
+              </option>
+            ))}
           </select>
         </label>
         <label>
           級別
           <select value={grade} onChange={(e) => setGrade(e.target.value as Grade)}>
-            <option value="hg">HG</option>
-            <option value="mg">MG</option>
-            <option value="rg">RG</option>
+            {GRADES.map((g) => (
+              <option key={g} value={g}>
+                {g.toUpperCase()}
+              </option>
+            ))}
           </select>
         </label>
         <label>

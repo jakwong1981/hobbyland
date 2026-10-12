@@ -128,7 +128,7 @@ describe('GET /api/imports/freshness', () => {
     expect(res.body.data).toEqual({
       grade: 'mg',
       overall: null,
-      byShop: { hobbyland: null, 'animes-pro': null },
+      byShop: { hobbyland: null, 'animes-pro': null, hobbydigi: null },
     });
   });
 

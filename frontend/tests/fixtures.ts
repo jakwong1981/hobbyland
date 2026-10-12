@@ -38,6 +38,10 @@ export function buildFreshness(overrides: Partial<ImportFreshness> = {}): Import
     byShop: {
       hobbyland: '2026-10-11T11:46:00.000Z',
       'animes-pro': '2026-10-11T11:47:00.000Z',
+      // A shop that has never been imported must be explicitly null: an absent
+      // key reads as undefined, which the FreshnessBar's `=== null` check would
+      // render as a <time> with no dateTime.
+      hobbydigi: null,
     },
     ...overrides,
   };

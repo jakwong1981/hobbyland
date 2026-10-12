@@ -3,12 +3,12 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { ProductRepository } from '../repositories/product.repository.js';
 import { importProducts, parseProductCsv } from '../services/import.service.js';
-import type { ApiResponse, ImportResult } from '../types/index.js';
+import { GRADES, SHOP_CODES, type ApiResponse, type ImportResult } from '../types/index.js';
 import { AppError } from '../utils/app-error.js';
 
 const importFieldsSchema = z.object({
-  shop: z.enum(['hobbyland', 'animes-pro']),
-  grade: z.enum(['hg', 'mg', 'rg']),
+  shop: z.enum(SHOP_CODES),
+  grade: z.enum(GRADES),
 });
 
 export class ImportController {

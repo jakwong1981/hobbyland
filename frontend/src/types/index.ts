@@ -1,6 +1,11 @@
 // frontend/src/types/index.ts
-export type ShopCode = 'hobbyland' | 'animes-pro';
-export type Grade = 'hg' | 'mg' | 'rg';
+// Mirrors backend/src/types/index.ts by hand — there is no shared package.
+export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi'] as const;
+export type ShopCode = (typeof SHOP_CODES)[number];
+
+export const GRADES = ['hg', 'mg', 'rg'] as const;
+export type Grade = (typeof GRADES)[number];
+
 export type CheapestShop = ShopCode | 'tie' | null;
 export type Faction = 'federation' | 'zeon';
 

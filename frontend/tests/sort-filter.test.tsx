@@ -7,7 +7,7 @@ import { ComparisonTable } from '../src/components/ComparisonTable';
 import { ShopFilter } from '../src/components/ShopFilter';
 import { DashboardPage } from '../src/pages/DashboardPage';
 import { useComparisonSort } from '../src/hooks/useComparisonSort';
-import type { ComparisonRow } from '../src/types';
+import { SHOP_CODES, type ComparisonRow } from '../src/types';
 import { buildOffer, buildRow, stubApi } from './fixtures';
 
 // Alpha is sold by both shops; Beta is hobbyland-only; Gamma is animes-only.
@@ -109,7 +109,7 @@ describe('ComparisonTable sorting', () => {
   it('marks the sortable headers unsorted and leaves the verdict header alone', () => {
     render(<ComparisonTable rows={ROWS} />);
 
-    for (const name of ['產品', 'Hobbyland', 'Animes-Pro']) {
+    for (const name of ['產品', 'Hobbyland', 'Animes-Pro', 'HobbyDigi']) {
       expect(screen.getByRole('columnheader', { name: new RegExp(name) })).toHaveAttribute(
         'aria-sort',
         'none',
@@ -143,10 +143,11 @@ describe('ComparisonTable sorting', () => {
 });
 
 describe('ShopFilter', () => {
-  it('defaults to all and lists both shops', () => {
+  it('defaults to all and lists every shop', () => {
     render(<ShopFilter value="all" onChange={() => undefined} />);
     expect(shopSelect()).toHaveValue('all');
-    expect(screen.getAllByRole('option')).toHaveLength(3);
+    // "all" plus one option per entry in SHOP_CODES.
+    expect(screen.getAllByRole('option')).toHaveLength(SHOP_CODES.length + 1);
   });
 
   it('emits the chosen shop', async () => {

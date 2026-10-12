@@ -15,6 +15,7 @@
   /* shops are told apart by neutral value only, never by faction colour */
   --shop-a: #dce6f2;
   --shop-b: #8b99ab;
+  --shop-c: #b8c3d0;
 
   --warning: #e8a33d;
   --error: #e5484d;
@@ -525,6 +526,10 @@ nav {
   color: var(--shop-b);
 }
 
+.shop-head.shop-c {
+  color: var(--shop-c);
+}
+
 .sort-btn {
   display: flex;
   align-items: center;
@@ -597,10 +602,10 @@ th[aria-sort="descending"] .sort-indicator {
   border-bottom: none;
 }
 
-.comparison-table td:nth-child(2),
-.comparison-table td:nth-child(3),
-.comparison-table th:nth-child(2),
-.comparison-table th:nth-child(3) {
+/* Class selectors rather than nth-child(2)/(3): a third price column would
+   otherwise render with no left divider. */
+.comparison-table td.price-cell,
+.comparison-table th.shop-head {
   border-left: 1px solid var(--border);
 }
 
@@ -667,6 +672,10 @@ th[aria-sort="descending"] .sort-indicator {
 
 .price-cell.shop-b .price-link {
   color: var(--shop-b);
+}
+
+.price-cell.shop-c .price-link {
+  color: var(--shop-c);
 }
 
 .price-cell .price-link:hover {

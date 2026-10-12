@@ -1,12 +1,7 @@
 // frontend/src/components/FreshnessBar.tsx
-import type { Grade, ImportFreshness, ShopCode } from '../types';
-
-const SHOPS: readonly ShopCode[] = ['hobbyland', 'animes-pro'];
-
-const SHOP_LABEL: Record<ShopCode, string> = {
-  'hobbyland': 'Hobbyland',
-  'animes-pro': 'Animes-Pro',
-};
+import type { Grade, ImportFreshness } from '../types';
+import { SHOP_CODES } from '../types';
+import { SHOP_LABEL } from '../shops';
 
 const GRADE_LABEL: Record<Grade, string> = { hg: 'HG', mg: 'MG', rg: 'RG' };
 
@@ -45,7 +40,7 @@ export function FreshnessBar({ freshness, isLoading }: Props) {
   return (
     <p className="freshness">
       <span className="freshness-label">最後更新{grade === null ? '' : ` · ${grade}`}</span>
-      {SHOPS.map((shop) => {
+      {SHOP_CODES.map((shop) => {
         const stamp = freshness.byShop[shop];
         return (
           <span key={shop} className="freshness-item">

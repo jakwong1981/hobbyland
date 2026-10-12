@@ -77,4 +77,57 @@ describe('buildComparisons', () => {
 
     expect(rows.map((r) => r.sku)).toEqual(['1111111111111', '9999999999999']);
   });
+
+  it('takes the group title from the highest-ranked shop, not row order', () => {
+    // findProducts orders by sku alone, so within a group the order is
+    // unspecified. Animes-Pro arriving first must not win the displayed title.
+    const rows = buildComparisons([
+      product({ id: 2, shopCode: 'animes-pro', price: 118, title: 'Animes wording' }),
+      product({ id: 1, shopCode: 'hobbyland', price: 140, title: 'Hobbyland wording' }),
+    ]);
+
+    expect(rows[0]!.title).toBe('Hobbyland wording');
+  });
+});
+
+describe('buildComparisons with more than two offers', () => {
+  // ShopCode has two members today. Casting a third pins the N-way arithmetic
+  // without adding a shop that has no data source behind it.
+  const thirdShop = () => 'third-shop' as ProductRow['shopCode'];
+
+  it('picks the cheapest and measures the saving against the runner-up', () => {
+    const rows = buildComparisons([
+      product({ id: 1, shopCode: 'hobbyland', price: 100 }),
+      product({ id: 2, shopCode: 'animes-pro', price: 150 }),
+      product({ id: 3, shopCode: thirdShop(), price: 120 }),
+    ]);
+    const row = rows[0]!;
+
+    expect(row.offers.map((o) => o.price)).toEqual([100, 120, 150]);
+    expect(row.cheapestShop).toBe('hobbyland');
+    expect(row.saving).toBe(20);
+    expect(row.exclusiveShop).toBeNull();
+  });
+
+  it('calls a two-way tie for the lowest price a tie even with a dearer third offer', () => {
+    const rows = buildComparisons([
+      product({ id: 1, shopCode: 'hobbyland', price: 100 }),
+      product({ id: 2, shopCode: 'animes-pro', price: 150 }),
+      product({ id: 3, shopCode: thirdShop(), price: 100 }),
+    ]);
+
+    expect(rows[0]!.cheapestShop).toBe('tie');
+    expect(rows[0]!.saving).toBe(0);
+  });
+
+  it('calls three level offers a tie', () => {
+    const rows = buildComparisons([
+      product({ id: 1, shopCode: 'hobbyland', price: 100 }),
+      product({ id: 2, shopCode: 'animes-pro', price: 100 }),
+      product({ id: 3, shopCode: thirdShop(), price: 100 }),
+    ]);
+
+    expect(rows[0]!.cheapestShop).toBe('tie');
+    expect(rows[0]!.exclusiveShop).toBeNull();
+  });
 });

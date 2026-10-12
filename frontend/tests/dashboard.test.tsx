@@ -83,6 +83,7 @@ describe('DashboardPage', () => {
         byShop: {
           hobbyland: '2026-10-11T11:46:00.000Z',
           'animes-pro': '2026-10-11T11:47:00.000Z',
+          hobbydigi: null,
         },
       }),
     );

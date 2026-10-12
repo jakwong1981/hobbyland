@@ -1,10 +1,6 @@
 // frontend/src/components/CheaperBadge.tsx
 import type { CheapestShop, ShopCode } from '../types';
-
-const SHOP_LABEL: Record<ShopCode, string> = {
-  'hobbyland': 'Hobbyland',
-  'animes-pro': 'Animes',
-};
+import { SHOP_SHORT_LABEL } from '../shops';
 
 interface Props {
   cheapestShop: CheapestShop;
@@ -14,7 +10,7 @@ interface Props {
 
 export function CheaperBadge({ cheapestShop, saving, exclusiveShop }: Props) {
   if (exclusiveShop !== null) {
-    return <span className="badge badge-exclusive">只有 {SHOP_LABEL[exclusiveShop]} 有貨</span>;
+    return <span className="badge badge-exclusive">只有 {SHOP_SHORT_LABEL[exclusiveShop]} 有貨</span>;
   }
   if (cheapestShop === 'tie') {
     return <span className="badge badge-tie">同價</span>;
@@ -24,7 +20,7 @@ export function CheaperBadge({ cheapestShop, saving, exclusiveShop }: Props) {
   }
   return (
     <span className="badge badge-cheaper">
-      {SHOP_LABEL[cheapestShop]} 平{saving !== null && saving > 0 ? ` HK$${saving.toFixed(0)}` : ''}
+      {SHOP_SHORT_LABEL[cheapestShop]} 平{saving !== null && saving > 0 ? ` HK$${saving.toFixed(0)}` : ''}
     </span>
   );
 }

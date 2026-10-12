@@ -4,27 +4,29 @@ import { z } from 'zod';
 import type { ProductRepository } from '../repositories/product.repository.js';
 import { buildComparisons } from '../services/comparison.service.js';
 import { buildFreshness } from '../services/import.service.js';
-import type {
-  ApiResponse,
-  ComparisonRow,
-  ImportBatchDto,
-  ImportFreshness,
-  ProductRow,
+import {
+  GRADES,
+  SHOP_CODES,
+  type ApiResponse,
+  type ComparisonRow,
+  type ImportBatchDto,
+  type ImportFreshness,
+  type ProductRow,
 } from '../types/index.js';
 
 const comparisonQuerySchema = z.object({
-  grade: z.enum(['hg', 'mg', 'rg']).optional(),
+  grade: z.enum(GRADES).optional(),
   q: z.string().trim().max(200).optional(),
-  cheaper: z.enum(['hobbyland', 'animes-pro']).optional(),
+  cheaper: z.enum(SHOP_CODES).optional(),
 });
 
 const freshnessQuerySchema = z.object({
-  grade: z.enum(['hg', 'mg', 'rg']).optional(),
+  grade: z.enum(GRADES).optional(),
 });
 
 const productQuerySchema = z.object({
-  shop: z.enum(['hobbyland', 'animes-pro']).optional(),
-  grade: z.enum(['hg', 'mg', 'rg']).optional(),
+  shop: z.enum(SHOP_CODES).optional(),
+  grade: z.enum(GRADES).optional(),
   q: z.string().trim().max(200).optional(),
 });
 
