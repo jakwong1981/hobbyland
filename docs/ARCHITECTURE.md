@@ -130,7 +130,7 @@ comparison query.
 flowchart LR
     subgraph Host
         CRON[cron job] --> SCR[hobbyland_scraper.py]
-        SCR --> CSV[(6 CSV files)]
+        SCR --> CSV[(9 CSV files)]
         CSV --> CLI[pnpm import:csv]
         subgraph Docker container :8080
             BE[Express backend<br/>node:24-slim] --> DB[(SQLite /data volume)]

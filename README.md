@@ -1,29 +1,35 @@
 # Gunpla Price Comparison Dashboard
 
-A self-hosted dashboard that answers one question: **for a given Bandai Gunpla kit, which of the two
-Hong Kong hobby shops is cheaper — and does only one of them actually stock it?**
+A self-hosted dashboard that answers one question: **for a given Bandai Gunpla kit, which of the
+Hong Kong hobby shops is cheapest — and does only one of them actually stock it?**
 
-It ingests scraper output from [Hobbyland E-Shop](https://www.hobbylandeshop.com) and
-[Animes-Pro](https://animes-pro.com), matches listings across the two shops by JAN barcode, and
-renders a per-SKU verdict.
+It ingests scraper output from [Hobbyland E-Shop](https://www.hobbylandeshop.com),
+[Animes-Pro](https://animes-pro.com) and [HobbyDigi](https://www.hobbydigi.com), matches listings
+across the shops by JAN barcode, and renders a per-SKU verdict.
 
 ```
-682 products · 481 comparison groups · HG 280 / MG 170 / RG 31   (as of 2026-10-11)
+709 products · 487 comparison groups · HG 285 / MG 171 / RG 31   (as of 2026-10-12)
 ```
 
 ---
 
 ## 1. Purpose
 
-Both shops sell overlapping Bandai catalogue, but they price independently, run different
-promotions, and — critically — **carry different subsets of the catalogue**. Of the 481 matched
-`(grade, sku)` groups, only 201 are sold by both shops; **280 are exclusive to one**.
+The shops sell overlapping Bandai catalogue, but they price independently, run different
+promotions, and — critically — **carry different subsets of the catalogue**. Of the 487 matched
+`(grade, sku)` groups, 211 are sold by more than one shop; **276 are exclusive to one**.
 
 That distribution drives the central design constraint: a naive "cheapest shop" badge is wrong more
 often than it is right, because a lone offer cannot win a price comparison. Saying「Animes 平」
 ("Animes is cheaper") for a kit Hobbyland does not even list is not a rounding error, it is a
-different claim. The verdict model is therefore explicit about which of the two situations it is in
+different claim. The verdict model is therefore explicit about which situation it is in
 (see [§4.2](#42-the-verdict-contract)).
+
+> **HobbyDigi coverage is partial by design.** The shop publishes no JAN for ~94% of its listings,
+> and no automatic name matcher exceeds ~92% precision on this catalogue — the residue is genuine
+> ambiguity (re-releases, P-Bandai vs. retail, dual transliterations). So only barcodes from the
+> shop's own product URL key, a model-code match, or a human-confirmed match are imported; the rest
+> are held for review rather than guessed. See [HobbyDigi matching](#hobbydigi-matching).
 
 Secondary goals:
 
@@ -39,9 +45,9 @@ Secondary goals:
 
 | Area | Behaviour |
 |---|---|
-| **Comparison grid** | One row per `(grade, sku)`, both shops' prices side by side, sale vs. regular price, stock / pre-order note, product thumbnail |
-| **Verdict badge** | 「<Shop> 平 HK$N」when both sell it and prices differ, 「同價」when equal, 「只有 <Shop> 有貨」when only one carries it |
-| **Frozen, sortable header** | Column header stays pinned while the grid scrolls; 產品 and both price columns sort asc/desc |
+| **Comparison grid** | One row per `(grade, sku)`, every shop's price side by side, sale vs. regular price, stock / pre-order note, product thumbnail |
+| **Verdict badge** | 「<Shop> 平 HK$N」when several sell it and prices differ, 「同價」when the lowest is shared, 「只有 <Shop> 有貨」when only one carries it |
+| **Frozen, sortable header** | Column header stays pinned while the grid scrolls; 產品 and every price column sort asc/desc |
 | **Shop filter** | 有售舖頭 select narrows to the SKUs a given shop carries (default 全部) |
 | **Last-update readout** | Per-shop import timestamp for the grade being viewed, so a stale scrape is visible at a glance |
 | **Grade tabs + search** | HG / MG / RG switch and a title-or-SKU search, both server-side |
@@ -125,7 +131,7 @@ flowchart TD
     A -->|"fetch /api/*"| R
     REPO --> DB
     CLI --> SVC
-    SCRAPE -->|"6 CSV files"| CLI
+    SCRAPE -->|"9 CSV files"| CLI
 ```
 
 - Controllers never see SQL; the repository never sees HTTP types.
@@ -141,10 +147,11 @@ This is the one design decision worth reading before touching the comparison log
 ```ts
 ComparisonRow = {
   sku, grade, title,
-  offers: Offer[],                       // sorted by price ascending
-  cheapestShop: 'hobbyland' | 'animes-pro' | 'tie' | null,
-  saving: number | null,                 // null when only one shop carries the SKU
-  exclusiveShop: 'hobbyland' | 'animes-pro' | null,   // set iff offers.length === 1
+  offers: Offer[],                       // sorted by price ascending, one per shop that stocks it
+  cheapestShop: ShopCode | 'tie' | null, // null only when there are no offers at all
+  saving: number | null,                 // null when one shop carries the SKU;
+                                         // otherwise the gap to the runner-up
+  exclusiveShop: ShopCode | null,        // set iff offers.length === 1
 }
 ```
 
@@ -157,10 +164,20 @@ ComparisonRow = {
 flowchart TD
     S["offers.length"] -->|"0"| N["cheapestShop = null<br/>badge: —"]
     S -->|"1"| E["exclusiveShop = that shop<br/>saving = null<br/>badge:「只有 &lt;Shop&gt; 有貨」"]
-    S -->|"2"| Q{"prices equal?"}
+    S -->|"≥2"| Q{"more than one offer<br/>at the lowest price?"}
     Q -->|yes| T["cheapestShop = 'tie'<br/>saving = 0<br/>badge:「同價」"]
-    Q -->|no| W["cheapestShop = lower shop<br/>saving = difference<br/>badge:「&lt;Shop&gt; 平 HK$N」"]
+    Q -->|no| W["cheapestShop = lowest shop<br/>saving = gap to runner-up<br/>badge:「&lt;Shop&gt; 平 HK$N」"]
 ```
+
+`saving` therefore means *"versus the next-best alternative"*, not *"versus one specific rival"*.
+With two shops those are the same thing; with three they are not, and the runner-up reading is the
+one that answers the question a buyer actually has. `exclusiveShop` is set only when a single shop
+carries the SKU — at three shops a kit sold by exactly two yields `null`, and the grid already shows
+which column is empty, so no separate "2 of 3" field is needed.
+
+The tie test counts every offer level with the lowest price rather than comparing the top two.
+Because `offers` is sorted ascending those are equivalent today, but the count says what it means
+and keeps holding if the sort is ever removed.
 
 The single-shop branch **also** sets `cheapestShop` to that shop. That is deliberate: it keeps
 `?cheaper=<shop>` matching exclusive listings, preserving the existing API contract. The UI must
@@ -169,6 +186,11 @@ branch on `exclusiveShop` *first* — `CheaperBadge` does exactly that.
 The rejected alternative was letting the badge infer exclusivity from `saving === null`. It works
 until someone adds a case where saving is legitimately null, and then it fails silently and
 invisibly. Making the state a named field costs one line in the service and removes the coupling.
+
+`title` comes from the highest-ranked shop in `SHOP_CODES`, not from whichever row the query
+returned first: `findProducts` orders by `sku` alone, so the order *within* a group is unspecified
+and the shops word the same kit differently. Without an explicit pick the displayed title depended
+on row insertion order.
 
 ### 4.3 Data model
 
@@ -244,9 +266,11 @@ Implemented as CSS custom properties scoped to `html[data-faction=…]`. An inli
 `index.html` applies the stored value **before first paint** so the accent never flashes the wrong
 faction; `useFaction` owns it thereafter.
 
-The two shops are deliberately **not** faction-coloured — they are separated by neutral value only
-(`--shop-a` bright, `--shop-b` dim). Painting one shop red and one blue would imply an allegiance
-the data does not have; the faction is a skin, not a claim.
+The shops are deliberately **not** faction-coloured — they are separated by neutral value only
+(`--shop-a` bright, `--shop-b` dim, `--shop-c` between). Painting one shop red and one blue would
+imply an allegiance the data does not have; the faction is a skin, not a claim. A new shop needs a
+`--shop-*` token plus its two rules; CSS has no compiler, so omitting them fails silently rather
+than loudly.
 
 Two CSS details that are load-bearing rather than cosmetic:
 
@@ -263,7 +287,7 @@ Two CSS details that are load-bearing rather than cosmetic:
 corepack enable
 pnpm install
 pnpm build          # type-check + build both packages
-pnpm test           # backend 29 + frontend 47
+pnpm test           # backend 34 + frontend 47
 pnpm dev            # backend :8080 (tsx watch) + frontend :5173 (vite, /api proxied)
 ```
 
@@ -282,17 +306,19 @@ pnpm build && pnpm start        # http://localhost:8080
 
 ```mermaid
 flowchart LR
-    CRON["cron 06:00"] --> SC["hobbyland_scraper.py<br/>(external repo)"]
+    CRON["cron 06:00"] --> SC["hobbyland_scraper.py"]
     SC -->|"HTTP API"| HL["Hobbyland Vue SPA backend"]
     SC -->|"Playwright + Chromium"| AP["Animes-Pro (Shopify)"]
-    HL --> CSV[("6 CSV files")]
+    SC -->|"Playwright, fresh context per page"| HD["HobbyDigi (Magento + Cloudflare)"]
+    HL --> CSV[("9 CSV files")]
     AP --> CSV
+    HD --> CSV
     CSV -->|"pnpm import:csv"| DB[("SQLite")]
     DB --> UI["Dashboard :8080"]
 ```
 
-The scraper lives **outside this repository**, at `~/github/python_program/hobbyland_scraper.py`.
-It is not vendored here because it has its own dependency profile (a Python `venv` plus Playwright):
+The scraper lives in this repository at `scripts/hobbyland_scraper.py` and runs from
+`scripts/venv`, which has its own dependency profile (Playwright plus a Chromium download):
 
 - **Hobbyland** is a Vue SPA whose category pages ship an empty HTML shell, so the scraper POSTs to
   the shop's own JSON API (`backend.hobbylandeshop.com/api/products`) and walks `total_pages`.
@@ -301,6 +327,7 @@ It is not vendored here because it has its own dependency profile (a Python `ven
   `__shopify_bv_challenge` URL and `/products.json` hard-429s scripted clients. A real Chromium
   solves the challenge, then listing pages are walked and product cards read from the DOM
   (handling lazy-load `data-src` / `srcset`, protocol-relative `//`, and `{width}` templates).
+- **HobbyDigi** is Magento 2 behind Cloudflare. See below.
 
 CSV contract (UTF-8 BOM):
 
@@ -318,15 +345,85 @@ pnpm import:csv -- --file /path/to/hobbyland_hg.csv    # single file
 
 `CSV_DIR` or `--dir` / `--file` is **required**; with none of them the CLI exits 1 with an
 actionable error rather than guessing a location. Filenames must match
-`(hobbyland|animes-pro)_(hg|mg|rg).csv` — the shop and grade are taken from the filename.
+`<shop>_<grade>.csv` for a shop in `SHOP_CODES` and a grade in `GRADES` — the pattern is derived
+from those constants, so adding a shop needs no second edit. The shop and grade are taken from the
+filename.
+
+> `pnpm import:csv` delegates through `pnpm --filter backend`, so the process CWD is `backend/`.
+> Pass an **absolute** `--dir`; a relative one resolves against `backend/` and fails with `ENOENT`.
 
 Scrape-and-import in one step:
 
 ```bash
 pnpm scrape                                  # host mode, all categories
 scripts/scrape-and-import.sh rg hg           # selected categories only
+scripts/scrape-and-import.sh hd              # hobbydigi (needs DEEPSEEK_API_KEY)
 scripts/scrape-and-import.sh --docker        # import into the running container
 ```
+
+### HobbyDigi matching
+
+HobbyDigi is the reason this project has a human-in-the-loop step, and the numbers behind that
+decision are worth recording because each was measured rather than assumed.
+
+**The crawl is solved.** Cloudflare budgets roughly two or three requests per cookie jar, and the
+budget does *not* recover with time (retested at +60 s and +120 s, still 403). A **fresh browser
+context per page** gets a fresh budget: 28 pages / 784 cards with zero blocks, where a single reused
+context died on page 3. Same-origin `fetch()` from an already-cleared page also works.
+
+**The identity problem is not.** Only ~6% of listings carry a JAN as the Magento URL key.
+`/graphql` 404s, `/rest/V1/products` 403s, product detail pages never clear the challenge, and the
+`"sku"` strings in the listing HTML are Knockout autocomplete template noise.
+
+Asking an LLM for the barcode does not work — measured **0 correct out of 44 ground-truth trials**.
+`deepseek-chat` scored 0/20 twice on titles whose JAN was known, and `deepseek-reasoner` fabricated
+even when explicitly offered "answer NONE". The inventions mimic genuine Bandai prefixes, and an
+EAN-13 check digit is *not* a safety net: across two identical calls the share of fabrications
+passing it went from 11/20 to 1/20, so output is non-deterministic even at temperature 0.
+
+Matching on product names caps out at **~92% precision** (201 labeled cross-shop pairs):
+
+| method | precision | recall |
+|---|---|---|
+| model-code exact match | **97.0%** | 31.8% |
+| LLM-extracted attribute tuple | 89.5% | 42.3% |
+| cascade: code → attribute | 91.6% | 59.7% |
+| LLM pick from pre-filtered candidates | 86.8% | 91.7% of answerable |
+| CJK-bigram similarity alone | ~85% | ~30% |
+
+The ceiling is not an algorithm failure — it is genuine ambiguity. Eight of 368
+`(grade, suit, variant)` keys in the catalogue map to more than one distinct SKU (re-releases,
+P-Bandai versus retail), and dual transliterations exist (`麥拉薩` and `梅薩拉` are both Messala).
+The errors are the dangerous kind: `泰坦斯配色` versus `奧干配色` are different colourways of the
+same mobile suit, and a false match yields a confidently wrong「最平」badge.
+
+So the pipeline accepts a JAN only from three sources, in order of trust:
+
+1. **The shop's own URL key** — authoritative, ~6% of listings.
+2. **A human-confirmed match** — `scripts/review_matches.py` proposes, a person decides once, and
+   the decision is cached by product URL so later runs are deterministic and free.
+3. **A model-code match** against the trusted catalogue (`jan_lookup.py`, threshold 0.72, which
+   arithmetically requires a shared mech designation — 94% recall at 100% precision on labeled
+   pairs).
+
+Everything else is left for review. Two guards make the residue safe:
+
+- **Variant collision.** If two differently-titled cards resolve to one `(grade, sku)`, *both* are
+  blanked and returned to the review queue. Without this, two GP02A kits (an MLRS and a Psalis)
+  matched the catalogue's single GP02A row and the `UNIQUE (shop_id, sku, grade)` index silently
+  swallowed one.
+- **No circular matching.** HobbyDigi's own rows are excluded from the catalogue
+  (`exclude_shops=`), because its JANs are *derived* by this matcher — offering them back would let
+  a wrong answer confirm itself on the next run.
+
+```bash
+scripts/venv/bin/python scripts/review_matches.py --list     # what is pending, no API calls
+scripts/venv/bin/python scripts/review_matches.py            # review; y / 0-9 / n / s / q
+```
+
+DeepSeek *is* used for one thing it is genuinely good at: **grade classification**, because that is
+recognition rather than recall. It graded 519 of 784 cards into hg/mg/rg and correctly rejected
+265 PG / SD / EG / 1:100 kits. MGSD folds into `mg` by product decision.
 
 ---
 
@@ -339,6 +436,7 @@ scripts/scrape-and-import.sh --docker        # import into the running container
 | `NODE_ENV` | `development` | Express mode |
 | `CSV_DIR` | *(none)* | Default `--dir` for the import CLI |
 | `LOG_LEVEL` | `info` | pino level |
+| `DEEPSEEK_API_KEY` | *(none)* | Scraper-only: classifies grade for the `hd` (hobbydigi.com) category and powers `review_matches.py`. The backend never reads it. |
 
 Copy `.env.example` to `.env` and adjust. SQLite is embedded, so there is no connection pool to
 tune. `createDatabase()` sets `PRAGMA journal_mode = WAL` (reads continue during an import) and
@@ -368,8 +466,8 @@ All responses use one envelope:
 ```ts
 ImportFreshness = {
   grade: 'hg' | 'mg' | 'rg' | null,        // null when unscoped
-  overall: string | null,                  // ISO-8601, latest across both shops
-  byShop: { hobbyland: string | null, 'animes-pro': string | null },
+  overall: string | null,                  // ISO-8601, latest across every shop
+  byShop: Record<ShopCode, string | null>, // one key per SHOP_CODES entry
 }
 ```
 
@@ -418,16 +516,16 @@ in-container import.
 ## 10. Testing
 
 ```bash
-pnpm test        # backend 29/29 · frontend 47/47
+pnpm test        # backend 34/34 · frontend 47/47
 ```
 
 | Suite | Environment | Covers |
 |---|---|---|
-| `comparison.service.test.ts` | node | Verdict computation: cheaper + saving, tie, single-shop, `exclusiveShop`, grade separation, SKU ordering |
-| `import.service.test.ts` | node + in-memory SQLite | CSV parsing, validation/skip rules, batch records, upsert idempotency, `image_url` mapping and **preservation**, `buildFreshness` (per-shop, latest-overall, absent shop → null) |
+| `comparison.service.test.ts` | node | Verdict computation: cheaper + saving, tie, single-shop, `exclusiveShop`, grade separation, SKU ordering, deterministic group title, and N-way offers (runner-up saving, bottom-two tie, three-way tie) |
+| `import.service.test.ts` | node + in-memory SQLite | CSV parsing, validation/skip rules, batch records, upsert idempotency, `image_url` mapping and **preservation**, `buildFreshness` (per-shop, latest-overall, absent shop → null, shop outside `SHOP_CODES` still counted) |
 | `api.test.ts` | node + supertest | All five endpoints, status codes, `traceId` on validation failure, freshness scoping by grade and the unscoped case |
-| `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (both shops, one shop missing, no history, loading, failed), tabs, search |
-| `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter, filtered counts, filter-specific empty state |
+| `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (every shop listed, one or more missing, no history, loading, failed), tabs, search |
+| `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter (option count derived from `SHOP_CODES.length + 1`), filtered counts, filter-specific empty state |
 | `faction.test.tsx` | jsdom + RTL | Theme default, persistence across mounts, `<html data-faction>` mirroring, unknown-value fallback |
 | `dashboard.test.tsx` | jsdom + RTL | API client unwrapping and `ApiError`, query-string building, refetch on grade change, the freshness request is grade-scoped and its timestamps render on the page, error surfacing |
 

@@ -3,19 +3,21 @@
 
 ## 1. Business Flow
 
-1. Scheduled cron job runs `~/github/python_program/hobbyland_scraper.py`, producing 6 CSVs
-   (`hobbyland_{hg,mg,rg}.csv`, `animes-pro_{hg,mg,rg}.csv`) with header
+1. Scheduled cron job runs `scripts/hobbyland_scraper.py`, producing up to 9 CSVs
+   (`hobbyland_{hg,mg,rg}.csv`, `animes-pro_{hg,mg,rg}.csv`, `hobbydigi_{hg,mg,rg}.csv`) with header
    `title,price,url,regular_price,sku,stock,sell_type,image_url` (UTF-8 BOM). Older CSVs without
    `image_url` still import — the field is `NULL` on insert and left untouched on re-import.
+   HobbyDigi writes only the grades it actually resolved, so a run may produce fewer than 9.
 2. Import (CLI `pnpm import:csv` or dashboard upload) parses CSV, validates rows, and upserts
    products keyed by `(shop_id, sku, grade)` inside a single transaction per file; each file
    produces one `import_batches` record.
-3. Dashboard queries `/api/comparisons`; the backend joins both shops' products, groups by
-   `(grade, sku)`, and computes the cheaper shop, the saving, and whether only one shop carries the
-   SKU. The UI badges the verdict —「<Shop> 平 HK$N」,「同價」, or「只有 <Shop> 有貨」.
+3. Dashboard queries `/api/comparisons`; the backend joins every shop's products, groups by
+   `(grade, sku)`, and computes the cheapest shop, the saving against the runner-up, and whether
+   only one shop carries the SKU. The UI badges the verdict —「<Shop> 平 HK$N」,「同價」, or
+   「只有 <Shop> 有貨」.
 4. Dashboard also queries `/api/imports/freshness?grade=` and shows one last-import timestamp per
-   shop above the grid. The two shops are scraped independently and drift apart, so freshness is
-   reported per shop rather than as a single global number — a stale half of the comparison should
+   shop above the grid. The shops are scraped independently and drift apart, so freshness is
+   reported per shop rather than as a single global number — a stale part of the comparison should
    be visible without inspecting the CSVs.
 
 ## 2. Validation Rules
@@ -23,22 +25,32 @@
 - **CSV row valid** iff: `title` non-empty, `sku` non-empty, `price` numeric ≥ 0.
   Invalid rows are counted as `skipped` (not fatal). Rows without a JAN SKU (e.g. non-Gunpla
   Ultraman items in animes-pro_mg.csv) are skipped by design — they can never match across shops.
-- **Upload** requires multipart `file` + `shop ∈ {hobbyland, animes-pro}` + `grade ∈ {hg,mg,rg}`;
+- **Upload** requires multipart `file` + `shop ∈ SHOP_CODES` + `grade ∈ GRADES`;
   a CSV with zero valid rows → 422; a malformed CSV (column-count mismatch etc.) → 400.
-- **Query params** validated with zod; invalid values → 400 with field-level messages.
+- **Query params** validated with zod; invalid values → 400 with field-level messages. The zod
+  enums are built from `SHOP_CODES` / `GRADES`, so a new shop is accepted without a second edit.
 
 ## 3. Comparison Semantics
 
 - Group key = `(grade, sku)` — the same JAN in HG and MG listings stays separate.
-- `offers` sorted ascending by price.
-- Two offers, different prices → `cheapestShop` = lower-priced shop, `saving` = price difference
-  (rounded to 2 dp), `exclusiveShop = null`. Badge:「<Shop> 平 HK$N」.
-- Equal prices → `cheapestShop = 'tie'`, `saving = 0`, `exclusiveShop = null`. Badge:「同價」.
+- `offers` sorted ascending by price, one per shop that stocks the SKU.
+- Two or more offers, one uniquely lowest → `cheapestShop` = that shop, `saving` = the gap to the
+  **runner-up** (rounded to 2 dp), `exclusiveShop = null`. Badge:「<Shop> 平 HK$N」. With two shops
+  the runner-up is the only rival; with three it is the next-best alternative, which is the number a
+  buyer actually cares about.
+- More than one offer at the lowest price → `cheapestShop = 'tie'`, `saving = 0`,
+  `exclusiveShop = null`. Badge:「同價」. The test counts every offer level with the lowest price
+  rather than comparing the top two, so a tie between the first and a later shop is still a tie.
 - Single-shop SKU → `exclusiveShop` = that shop, `saving = null`. Badge:「只有 <Shop> 有貨」.
   `cheapestShop` still carries that shop so the `cheaper=` filter keeps matching it, but the UI must
   not render a price-comparison verdict: a lone offer never won anything, so「<Shop> 平」is wrong.
   `exclusiveShop` exists so the badge reads the verdict instead of inferring it from `saving === null`.
-  This is the majority case — 280 of 481 groups as of 2026-10-11 (HG 169, MG 97, RG 14).
+  This is the majority case — 276 of 487 groups as of 2026-10-12.
+- A SKU carried by exactly two of three shops yields `exclusiveShop = null`; the grid already shows
+  the empty column, so there is no separate "2 of 3" field.
+- `title` is taken from the highest-ranked shop in `SHOP_CODES`. `findProducts` orders by `sku`
+  alone, so within a group the row order is unspecified and the shops word the same kit differently
+  — an explicit pick keeps the displayed title stable across runs.
 
 ## 4. State Transitions
 
@@ -68,6 +80,6 @@ The dashboard is a dark HUD cockpit skin with one global faction theme, switched
 between 聯邦 (Federation — blue `#58a6e8` / yellow `#f0c343`) and 自護 (Zeon — red `#d9483b` /
 off-white `#e6e1d7`). The choice persists to `localStorage` under `hobbyland:faction` and is mirrored
 onto `<html data-faction>`; the inline bootstrap in `index.html` applies it before first paint so the
-accent never flashes the wrong faction. The two shops are deliberately **not** faction-coloured —
-they are separated by neutral value only (`--shop-a` bright, `--shop-b` dim), so the faction stays a
-skin rather than a claim about either shop.
+accent never flashes the wrong faction. The shops are deliberately **not** faction-coloured —
+they are separated by neutral value only (`--shop-a` bright, `--shop-b` dim, `--shop-c` between), so
+the faction stays a skin rather than a claim about any shop.

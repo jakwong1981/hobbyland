@@ -13,7 +13,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 
 ## 1. Unit Test Suites
 
-### comparison.service.test.ts (6 tests)
+### comparison.service.test.ts (10 tests)
 
 | # | Case | Asserts |
 |---|---|---|
@@ -23,8 +23,15 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 4 | Single-shop SKU (exclusive) | `exclusiveShop` = that shop — the flag the badge branches on |
 | 5 | Same SKU in different grades | two separate groups |
 | 6 | Sorting | rows ordered by SKU |
+| 7 | Group title vs. row order | title comes from the highest-ranked shop in `SHOP_CODES`, not from whichever row `findProducts` happened to return first |
+| 8 | Three offers, distinct prices | offers sorted asc, cheapest wins, `saving` = gap to the **runner-up** |
+| 9 | Three offers, two level at the bottom | `cheapestShop = 'tie'` even though a dearer third offer exists |
+| 10 | Three level offers | `cheapestShop = 'tie'`, `exclusiveShop = null` |
 
-### import.service.test.ts (12 tests)
+> Cases 8-10 cast a third shop code that `ShopCode` does not declare. They pin the
+> N-way arithmetic without adding a shop that has no data source behind it.
+
+### import.service.test.ts (13 tests)
 
 | # | Case | Asserts |
 |---|---|---|
@@ -40,6 +47,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 10 | `buildFreshness`, shops in the other order | `overall` still resolves to the chronologically latest, not the last row |
 | 11 | `buildFreshness`, one shop absent | absent shop → `null`; a `null` grade is passed through |
 | 12 | `buildFreshness`, no rows | `overall = null`, both shops `null` |
+| 13 | `buildFreshness`, a shop outside `SHOP_CODES` | its timestamp still counts towards `overall` — `mapProductRow` casts `shop_code` unchecked, so this reaches the service at runtime |
 
 ### api.test.ts (11 tests, supertest + in-memory DB)
 
@@ -70,35 +78,72 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 `stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
 queries, so a single-payload stub would answer the freshness request with a comparison array.
 
-Current status: **backend 29/29, frontend 47/47 passing**; `pnpm build` clean under strict TS.
+Current status: **backend 34/34, frontend 47/47 passing**; `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
 | Test Case ID | Scenario | Preconditions | Input Payload | Expected Status & Response | Pass/Fail Criteria |
 |---|---|---|---|---|---|
-| IT-01 | CLI bulk import | 6 scraper CSVs present | `pnpm import:csv` | 6 batches; HG 252+139, MG 100+143, RG 26+22 rows | row counts match CSV line counts minus skipped |
+| IT-01 | CLI bulk import | up to 9 scraper CSVs present | `pnpm import:csv -- --dir <abs path>` | one batch per CSV; HG 252+139+18, MG 100+143+8, RG 26+22+1 rows | row counts match CSV line counts minus skipped |
 | IT-02 | Skip SKU-less rows | animes-pro_mg.csv contains Ultraman items w/o JAN | IT-01 | skipped=103 for that file | skipped count matches rows with empty sku |
-| IT-03 | Dashboard grouping | IT-01 done | `GET /api/comparisons?grade=hg` | 280 rows, 111 with 2 offers, 169 exclusive | counts match |
-| IT-04 | Cheaper badge | IT-01 done | `cheaper=hobbyland` / `cheaper=animes-pro` | 200 / 64 rows (HG) | each row's `cheapestShop` equals filter — **note** the filter also matches single-shop rows (141 / 28 of those totals); see §4 |
+| IT-03 | Dashboard grouping | IT-01 done | `GET /api/comparisons?grade=hg` | 285 rows: 114 with 2 offers, 5 with 3, 166 exclusive | counts match |
+| IT-04 | Cheaper badge | IT-01 done | `cheaper=hobbyland` / `animes-pro` / `hobbydigi` | 200 each; HG 202 / 59 / 11 rows | each row's `cheapestShop` equals filter — **note** the filter also matches single-shop rows; see §4 |
 | IT-05 | UI upload | server running | multipart CSV via「匯入」page | 201 + visible in grid | product appears in dashboard |
 | IT-06 | Invalid grade | — | `GET /api/comparisons?grade=pg` | 400 ApiErrorResponse + traceId | zod message present |
+| IT-06b | Invalid shop | — | `GET /api/products?shop=bogus` | 400 | zod enum derives from `SHOP_CODES`, so all three real shops return 200 |
 | IT-07 | Empty/invalid CSV upload | server running | `bad.csv` no valid rows | 422 | no batch written |
 | IT-08 | Malformed CSV upload | server running | column-count mismatch | 400 | transaction rolled back |
 | IT-09 | SPA serving | `pnpm build` done | `GET /` | index.html | title「Gunpla 格價 // Price Recon」, `<html data-faction>` bootstrap present |
-| IT-10 | Re-import idempotency | IT-01 done | run IT-01 again | same product count, +6 batches | no duplicate (shop, sku, grade) |
+| IT-10 | Re-import idempotency | IT-01 done | run IT-01 again | same product count, one extra batch per CSV | no duplicate (shop, sku, grade) |
 | IT-11 | Docker e2e | image built | `docker compose up` | UI on :8080 with data volume | IT-03 repeatable in container |
-| IT-12 | Exclusive verdict end-to-end | IT-01 done | `GET /api/comparisons?grade=hg` | 169 rows with `exclusiveShop` set | UI shows「只有 <Shop> 有貨」, no「平」badge on those rows |
+| IT-12 | Exclusive verdict end-to-end | IT-01 done | `GET /api/comparisons?grade=hg` | 166 rows with `exclusiveShop` set | UI shows「只有 <Shop> 有貨」, no「平」badge on those rows |
+| IT-12b | Three-shop verdict | IT-01 done | `GET /api/comparisons?grade=mg` | 5 rows with 3 offers; `saving` is the gap to the **runner-up**, not to one named rival | a tie between the two cheapest still reads「同價」even with a dearer third offer |
 | IT-13 | Stale CSV cannot strip images | IT-01 done, all rows imaged | re-import a CSV with the `image_url` column removed | that grade keeps 100% image coverage | `SUM(image_url IS NOT NULL)` unchanged; price/stock still refresh |
 | IT-14 | Stale container replacement | a non-compose container named `hobbyland-app-1` squats :8080 on an old image | `scripts/docker-deploy.sh` | script logs「Removing leftover container」and recreates from `:latest` | `GET /api/comparisons` afterwards carries the current contract (`exclusiveShop` present) |
-| IT-15 | Frozen header + zebra | IT-01 done, :8080 serving | scroll the 280-row HG grid | column header stays pinned; rows alternate shade | `th` computed `position: sticky`; `.table-wrapper` is the scroll container |
-| IT-16 | Sort + filter on real data | IT-01 done | click 產品 / price headers; pick Hobbyland in 有售舖頭 | rows reorder client-side with no refetch; count becomes `M / N 個 SKU` | sorting a shop's price puts SKUs that shop does not carry last |
-| IT-17 | Preview image sizing | IT-01 done, 682/682 imaged | inspect a row thumbnail | 88px square (60px ≤640px), `object-fit: cover`, no white letterbox | thumbnail box has no padding and a dark `--surface-2` fill |
-| IT-18 | Last-update readout | IT-01 done | `GET /api/imports/freshness?grade=hg` | 200, both shops non-null, `overall` = the later timestamp | dashboard renders two `<time dateTime>` elements above the grid; switching grade refetches |
-| IT-19 | Freshness for an unscraped grade | only HG imported | `GET /api/imports/freshness?grade=rg` | 200, `overall = null`, both shops `null` | readout shows「呢個級別未有匯入紀錄」rather than an HG timestamp |
+| IT-15 | Frozen header + zebra | IT-01 done, :8080 serving | scroll the 285-row HG grid | column header stays pinned; rows alternate shade | `th` computed `position: sticky`; `.table-wrapper` is the scroll container |
+| IT-16 | Sort + filter on real data | IT-01 done | click 產品 / any price header; pick a shop in 有售舖頭 | rows reorder client-side with no refetch; count becomes `M / N 個 SKU` | sorting a shop's price puts SKUs that shop does not carry last |
+| IT-17 | Preview image sizing | IT-01 done, 709/709 imaged | inspect a row thumbnail | 88px square (60px ≤640px), `object-fit: cover`, no white letterbox | thumbnail box has no padding and a dark `--surface-2` fill |
+| IT-18 | Last-update readout | IT-01 done | `GET /api/imports/freshness?grade=hg` | 200, all three shops non-null, `overall` = the latest timestamp | dashboard renders three `<time dateTime>` elements above the grid; switching grade refetches |
+| IT-18b | `overall` counts an unlisted shop | a shop present in `shops` but absent from `SHOP_CODES` has the newest timestamp | `GET /api/imports/freshness` | `overall` reflects that newest timestamp | `buildFreshness` derives from the populated map, not a hardcoded shop list |
+| IT-19 | Freshness for an unscraped grade | only HG imported | `GET /api/imports/freshness?grade=rg` | 200, `overall = null`, all shops `null` | readout shows「呢個級別未有匯入紀錄」rather than an HG timestamp |
+| IT-20 | Third price column renders | IT-01 done, :8080 serving | inspect the HG grid | HobbyDigi column present with its own neutral tone **and** a left divider | built CSS contains `--shop-c`, `.shop-head.shop-c`, `.price-cell.shop-c .price-link`, and the divider rule keys off `td.price-cell` / `th.shop-head` rather than `nth-child` |
+| IT-21 | HobbyDigi variant guard | `hd` scrape done | inspect the resolution report | `variants quashed ≥ 0`; no duplicate `(grade, sku)` inside any `hobbydigi_*.csv` | two differently-titled cards resolving to one barcode are both blanked, so the `UNIQUE (shop_id, sku, grade)` upsert cannot silently swallow one |
+| IT-22 | No circular matching | hobbydigi rows already imported | re-run `hd` | the report's `catalogue size` excludes hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('hobbydigi',))` |
 
-## 3. Manual Verification Performed (2026-10-11, re-run after the exclusive-verdict + HUD theme work)
+## 3. Manual Verification Performed
 
-- `pnpm build` clean (backend + frontend, strict TS); `pnpm test` → backend 29/29, frontend 47/47.
+### 2026-10-12 — third shop (HobbyDigi) + N-shop generalization
+
+- `pnpm -r run build` clean; `pnpm test` → **backend 34/34, frontend 47/47**. Python: **68/68**
+  (`scripts/venv/bin/python -m unittest discover -s scripts -p 'test_*.py'`).
+- Crawled HobbyDigi with a fresh browser context per page: **28 pages / 784 cards, zero blocks**.
+  A single reused context dies on page 3, and the Cloudflare budget does not recover with time
+  (retested at +60 s and +120 s).
+- Resolution: 519/784 graded in scope (265 correctly rejected as PG/SD/EG/1:100), JAN from
+  URL key 14, from model-code match 13, **1 variant group quashed**, 492 left for review.
+- IT-21 reproduced for real: two GP02A kits (an MLRS and a Psalis) both matched the catalogue's
+  single GP02A row, and the `UNIQUE (shop_id, sku, grade)` upsert silently swallowed one —
+  20 CSV rows became 19. The collision guard now blanks both.
+- IT-22 reproduced for real: after the first import, HobbyDigi's own titles appeared in the
+  candidate pool (`Bandai MG 組裝模型 - 1/100 …` alongside `[現貨] MG 1/100【…】`), and the review
+  queue shrank 492 → 490 because cards matched their own imported rows. Fixed with `exclude_shops`.
+- Import on an existing database: the `INSERT OR IGNORE` shops seed added `hobbydigi` on boot —
+  **no migration, no re-import**, the other 682 rows untouched.
+- `GET /api/comparisons?grade=mg` → 171 rows, offers-per-row `{1: 96, 2: 70, 3: 5}`,
+  `cheapestShop {animes-pro: 85, hobbyland: 81, tie: 4, hobbydigi: 1}`,
+  `exclusiveShop {animes-pro: 69, null: 75, hobbyland: 26, hobbydigi: 1}`.
+- `GET /api/imports/freshness?grade=hg` → `byShop` has three keys and `overall` equals the newest,
+  which is HobbyDigi's; under the old hardcoded-shop-list code that timestamp was dropped.
+- `GET /api/products?shop=hobbydigi` → 200; `shop=bogus` → 400.
+- Built bundle verified: `--shop-c: #b8c3d0`, `.shop-head.shop-c`, `.price-cell.shop-c .price-link`
+  all present, and the divider rule is `.comparison-table td.price-cell, …th.shop-head` — the old
+  `nth-child(2)/(3)` form is gone.
+- **Caution recorded:** running `pnpm -r run build` in parallel with a server started from
+  `backend/dist` produced a false `shop=hobbydigi → 400`. Build and run sequentially.
+
+### 2026-10-11 — exclusive verdict + HUD theme
+
+- `pnpm build` clean (backend + frontend, strict TS); `pnpm test` → backend 34/34, frontend 47/47.
 - Re-scraped HG/MG for both shops with the image-aware scraper, then `pnpm import:csv` →
   682 products, **682/682 with an absolute `image_url`** (was 48/682 before the re-scrape).
   All 6 CSVs now carry the `image_url` column at 100% coverage; 0 relative URLs —

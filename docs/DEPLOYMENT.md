@@ -19,6 +19,7 @@
 | `NODE_ENV` | `development` | Express mode |
 | `CSV_DIR` | scraper dir | Default `--dir` for the import CLI |
 | `LOG_LEVEL` | `info` | pino level |
+| `DEEPSEEK_API_KEY` | *(none)* | Scraper-only: classifies grade for the `hd` (hobbydigi.com) category and powers `review_matches.py`; the backend never reads it |
 
 SQLite is embedded; connection pooling (HikariCP-style) is not applicable. WAL mode allows
 concurrent reads during imports.
@@ -37,7 +38,9 @@ pnpm start        # run built backend (serves frontend/dist)
 ## 4. Data Import
 
 ```bash
-# all 6 CSVs from the scraper folder (default --dir)
+# every matching CSV in the scraper folder (default --dir); pass an ABSOLUTE
+# path — the script delegates through `pnpm --filter backend`, so a relative one
+# resolves against backend/ and fails with ENOENT
 pnpm import:csv
 
 # explicit folder / single file
@@ -87,10 +90,11 @@ pnpm scrape                             # shortcut for the host-mode run
 ```
 
 ```cron
-# scrape both shops, then refresh the comparison database
+# scrape every shop, then refresh the comparison database
 # cron runs the command through /bin/sh, so $HOME expands
+# the `hd` category needs DEEPSEEK_API_KEY in the environment or the repo .env
 0 6 * * *  $HOME/github/hobbyland/scripts/scrape-and-import.sh --docker \
-  >> $HOME/github/python_program/cron.log 2>&1
+  >> $HOME/github/hobbyland/cron.log 2>&1
 ```
 
 Inside Docker, import via exec (container has prod deps only, so run the compiled CLI with `node`):

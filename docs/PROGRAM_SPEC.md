@@ -71,7 +71,7 @@ Errors are `ApiErrorResponse = { code: <httpStatus>, message, data: null, timest
 
 | Method | Path | Query / Body | Response `data` |
 |---|---|---|---|
-| GET | `/api/comparisons` | `grade?=hg|mg|rg`, `q?=text`, `cheaper?=hobbyland|animes-pro` | `ComparisonRow[]` |
+| GET | `/api/comparisons` | `grade?=hg|mg|rg`, `q?=text`, `cheaper?=<ShopCode>` | `ComparisonRow[]` |
 | GET | `/api/products` | `shop?`, `grade?`, `q?` | `ProductRow[]` |
 | GET | `/api/imports/freshness` | `grade?=hg|mg|rg` | `ImportFreshness` |
 | GET | `/api/imports` | — | `ImportBatchDto[]` (latest 20) |
@@ -80,7 +80,7 @@ Errors are `ApiErrorResponse = { code: <httpStatus>, message, data: null, timest
 ```ts
 ImportFreshness = {
   grade: Grade | null;                     // null when the query omitted `grade`
-  overall: string | null;                  // ISO-8601; latest across both shops, null if none
+  overall: string | null;                  // ISO-8601; latest across every shop, null if none
   byShop: Record<ShopCode, string | null>; // per-shop MAX(products.imported_at)
 }
 ```
@@ -92,14 +92,19 @@ the SQL.
 
 ```ts
 ComparisonRow = {
-  sku: string; grade: 'hg'|'mg'|'rg'; title: string;
-  offers: Offer[];                       // sorted by price asc
-  cheapestShop: 'hobbyland'|'animes-pro'|'tie'|null;
-  saving: number|null;                   // null when only one shop carries the SKU
-  exclusiveShop: 'hobbyland'|'animes-pro'|null;  // set iff offers.length === 1
+  sku: string; grade: Grade; title: string;
+  offers: Offer[];                       // sorted by price asc, one per shop that stocks the SKU
+  cheapestShop: ShopCode | 'tie' | null; // null only when there are no offers
+  saving: number|null;                   // null for a single offer; else the gap to the runner-up
+  exclusiveShop: ShopCode | null;        // set iff offers.length === 1
 }
 Offer = { shop, price, regularPrice|null, url, stock|null, sellType|null, imageUrl|null }
 ```
+
+`ShopCode` and `Grade` derive from the `SHOP_CODES` / `GRADES` constants, which also drive the zod
+query enums and the importer's `FILE_PATTERN`. Adding a shop is one array entry plus a `shops` seed
+row — the seed is `INSERT OR IGNORE` and re-runs on every boot, so an existing database picks it up
+with no migration and no re-import.
 
 `cheapestShop` answers "who would win the `cheaper=` filter"; `exclusiveShop` answers "was there a
 race at all". The UI must branch on `exclusiveShop` first — a single-offer SKU renders

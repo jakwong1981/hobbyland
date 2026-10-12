@@ -11,5 +11,8 @@ coverage/
 .qwen/
 pi-session-*.html
 
+# python artifacts
+__pycache__/
+
 # local scratch notes
 enhancement.md
