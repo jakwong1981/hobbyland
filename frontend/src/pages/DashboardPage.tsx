@@ -5,31 +5,42 @@ import { SearchBar } from '../components/SearchBar';
 import { ShopFilter } from '../components/ShopFilter';
 import { FreshnessBar } from '../components/FreshnessBar';
 import { ComparisonTable } from '../components/ComparisonTable';
+import { ComparisonGallery } from '../components/ComparisonGallery';
+import { HeroBanner } from '../components/HeroBanner';
+import { KitShowcase } from '../components/KitShowcase';
+import { ViewToggle } from '../components/ViewToggle';
 import { useComparisons } from '../hooks/useComparisons';
 import { useImportFreshness } from '../hooks/useImportFreshness';
-import type { Grade, ShopFilterValue } from '../types';
+import type { ComparisonRow, DashboardView, Grade, ShopFilterValue } from '../types';
+
+const NO_ROWS: ComparisonRow[] = [];
 
 export function DashboardPage() {
   const [grade, setGrade] = useState<Grade>('hg');
   const [q, setQ] = useState('');
   const [shop, setShop] = useState<ShopFilterValue>('all');
+  const [view, setView] = useState<DashboardView>('table');
   const { data, isLoading, isError, error } = useComparisons({
     grade,
     ...(q.trim() ? { q: q.trim() } : {}),
   });
   const { data: freshness, isLoading: isFreshnessLoading } = useImportFreshness(grade);
+  const rows = data ?? NO_ROWS;
 
-  const visible = useMemo(() => {
-    const rows = data ?? [];
-    return shop === 'all' ? rows : rows.filter((r) => r.offers.some((o) => o.shop === shop));
-  }, [data, shop]);
+  const visible = useMemo(
+    () => (shop === 'all' ? rows : rows.filter((r) => r.offers.some((o) => o.shop === shop))),
+    [rows, shop],
+  );
 
   return (
-    <section>
+    <section className="dashboard">
+      <HeroBanner rows={rows} grade={grade} />
+      <KitShowcase rows={rows} />
       <div className="toolbar">
         <GradeTabs value={grade} onChange={setGrade} />
         <ShopFilter value={shop} onChange={setShop} />
         <SearchBar value={q} onChange={setQ} />
+        <ViewToggle value={view} onChange={setView} />
       </div>
       <div className="status-row">
         {isLoading && <p className="status">載入中…</p>}
@@ -45,8 +56,10 @@ export function DashboardPage() {
           </p>
           {visible.length === 0 && data.length > 0 ? (
             <p className="empty-state">呢個舖頭篩選冇匹配嘅 SKU。</p>
-          ) : (
+          ) : view === 'table' ? (
             <ComparisonTable rows={visible} />
+          ) : (
+            <ComparisonGallery rows={visible} />
           )}
         </>
       )}

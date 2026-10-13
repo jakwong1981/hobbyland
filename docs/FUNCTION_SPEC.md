@@ -76,10 +76,33 @@ semantics can be added later if needed.
 
 ## 6. Presentation Theme
 
-The dashboard is a dark HUD cockpit skin with one global faction theme, switched from the header
-between 聯邦 (Federation — blue `#58a6e8` / yellow `#f0c343`) and 自護 (Zeon — red `#d9483b` /
-off-white `#e6e1d7`). The choice persists to `localStorage` under `hobbyland:faction` and is mirrored
-onto `<html data-faction>`; the inline bootstrap in `index.html` applies it before first paint so the
-accent never flashes the wrong faction. The shops are deliberately **not** faction-coloured —
-they are separated by neutral value only (`--shop-a` bright, `--shop-b` dim, `--shop-c` between), so
-the faction stays a skin rather than a claim about any shop.
+The dashboard is a dark mobile-suit HUD skin with one global faction theme, switched from the header
+between 聯邦 (Federation — RX tricolour: white `#f4f7fb`, blue `#2f8cf0`, red `#e8414a`, yellow
+`#f5c518`) and 自護 (Zeon — red `#e0402f`, Zaku green `#6a9a43`, gold `#d4ae3e`, mono-eye pink
+`#ff3d7f`). Each faction exposes four accents (`--accent` … `--accent-4`) plus two glows. The choice
+persists to `localStorage` under `hobbyland:faction` and is mirrored onto `<html data-faction>`; the
+inline bootstrap in `index.html` applies it before first paint. A diagonal colour wipe plays on a
+real switch only (never on first load).
+
+Layout, top to bottom:
+1. **Header** — animated crest (rotating frame, pulsing mark) and a four-colour faction stripe with a
+   travelling light bar.
+2. **Hero** — original SVG mobile-suit head per faction (V-fin glint / sweeping mono-eye; both are
+   rendered and CSS cross-fades), faction copy, and stat tiles that count up.
+3. **Kit showcase** — infinite marquee of kit photos (from the scraped `image_url`), pauses on
+   hover/focus. Titles are exposed via `aria-label`/`title` only, not as visible text.
+4. **Toolbar** — grade tabs with coloured grade emblems (HG blue, MG amber, RG red), shop filter,
+   search, 表格/圖鑑 view toggle.
+5. **Content** — table (shop logos in headers, staggered row entrance, thumbnail zoom, shining 最平
+   badge) or gallery cards (large photo, per-shop price list, winner highlighted).
+
+Logos: every shop has an SVG monogram chip (`HL` hexagon, `AP` circle, `HD` diamond) tinted with its
+`--shop-*` colour. Shop colour tints logos only — price text stays neutral so the faction accent
+keeps meaning "the winner".
+
+Motion is confined to `styles/motion.css` inside `@media (prefers-reduced-motion: no-preference)`.
+With reduced motion: no animation or transitions, count-ups show the final value immediately, and
+the marquee becomes a plain horizontally scrollable strip without its duplicate copy.
+
+No official artwork is bundled: kit photos are hot-linked from the shops (`referrerPolicy=no-referrer`),
+and mobile-suit art is original line drawing.

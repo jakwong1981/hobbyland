@@ -40,3 +40,21 @@ if (typeof window !== 'undefined' && window !== (globalThis as unknown as Window
 afterEach(() => {
   cleanup();
 });
+
+// jsdom has no matchMedia; motion hooks query prefers-reduced-motion through it.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  });
+}

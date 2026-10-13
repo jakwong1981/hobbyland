@@ -65,20 +65,25 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 10 | GET /api/imports/freshness | no `grade` | 200, `grade = null`, `overall` non-null |
 | 11 | GET /api/imports/freshness | `grade=pg` (invalid) | 400 + traceId |
 
-### Frontend (`frontend/tests/`, 47 tests)
+### Frontend (`frontend/tests/`, 67 tests)
 
 | File | Cases |
 |---|---|
 | components.test.tsx (21) | `CheaperBadge` (cheapest shop named without the saving amount, tie, single-shop →「只有 Animes 有貨」and never「最平」, hobbyland-exclusive, exclusive outranks a tie verdict, none); `ComparisonTable` (empty state, both prices + badge, missing-shop placeholder + exclusive label, regular price only when higher, pre-order flag, preview image rendered, grade placeholder when no image, `onError` → placeholder); `FreshnessBar` (both shops with `dateTime`, one shop「冇紀錄」, no history at all, loading vs. failed); `GradeTabs` (selected state, emits grade); `SearchBar` (emits text) |
 | dashboard.test.tsx (8) | api client (unwrap data, `ApiError` on failure, query-string building); `DashboardPage` (default HG load, refetch on grade change, freshness requested grade-scoped, **both timestamps rendered on the page**, error message + freshness failure state) |
 | faction.test.tsx (6) | `FactionToggle` (active faction `aria-checked`, emits clicked faction); `useFaction` (federation default + `<html data-faction>`, persist & restore across mounts, unknown stored value → federation); `App` (header toggle flips the document faction) |
+| comparison-stats.test.ts (7) | `summarizeComparisons` (per-shop wins, ties, exclusives counted apart, empty input); `productImageUrl` (SHOP_CODES preference, null without photo); `selectShowcaseKits` (photo-only, biggest saving first, links lowest offer, cap) |
+| count-up.test.tsx (4) | `useCountUp` (reduced motion → target immediately with no frame scheduled, tween 0 → target, continues from shown value on target change, cancels frame on unmount) — rAF and `matchMedia` stubbed |
+| layout.test.tsx (9) | `HeroBanner` (stat targets, both faction heads rendered); `KitShowcase` (nothing without photos, link to cheapest offer + `aria-hidden` clone, failed photo drops kit); `ComparisonGallery` (empty state, per-shop prices + winner + verdict); `FactionWipe` (hidden on first render, plays after switch); `DashboardPage` (表格 ↔ 圖鑑 toggle) |
 | sort-filter.test.tsx (12) | `useComparisonSort` (incoming order kept while unsorted, title asc/desc, per-shop price asc/desc with the non-carrying shop always last, input array not mutated); `ComparisonTable` (three sortable headers start `aria-sort="none"`, verdict header has no button, click reorders rows + flips `aria-sort`, price header reorders); `ShopFilter` (defaults to `all` with 3 options, emits choice); `DashboardPage` (all-by-default count, filtered `M / N` count with the other shop's rows hidden, filter-specific empty state) |
 
 `fetch` is stubbed per test; `QueryClient` retries are disabled. `tests/fixtures.ts` exports
 `stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
 queries, so a single-payload stub would answer the freshness request with a comparison array.
 
-Current status: **backend 34/34, frontend 47/47 passing**; `pnpm build` clean under strict TS.
+`tests/setup.ts` also installs a `window.matchMedia` stub (jsdom has none) returning `matches: false`.
+
+Current status: **backend 34/34, frontend 67/67 passing**; `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
@@ -111,6 +116,14 @@ Current status: **backend 34/34, frontend 47/47 passing**; `pnpm build` clean un
 | IT-22 | No circular matching | hobbydigi rows already imported | re-run `hd` | the report's `catalogue size` excludes hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('hobbydigi',))` |
 
 ## 3. Manual Verification Performed
+
+### 2026-10-13 — enhancement 3 layout (hero, showcase, gallery, motion)
+
+Headless Chrome against the live backend (285 HG SKUs) at 1280px and 390px, both factions:
+hero stats populated (285 / 69 / 31 / 6 / 166) and counted up; showcase scrolled with real kit photos
+and paused on hover; gallery cards rendered with the winner row highlighted; 自護 swapped art, palette
+and copy. HobbyDigi photos blocked by the shop's cross-origin policy (`ERR_BLOCKED_BY_RESPONSE`)
+fell back to the grade placeholder / were dropped from the showcase as designed.
 
 ### 2026-10-12 — third shop (HobbyDigi) + N-shop generalization
 

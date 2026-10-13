@@ -4,6 +4,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ImportPage } from './pages/ImportPage';
 import { FactionCrest } from './components/FactionCrest';
 import { FactionToggle } from './components/FactionToggle';
+import { FactionWipe } from './components/FactionWipe';
 import { useFaction } from './hooks/useFaction';
 import { SHOP_CODES } from './types';
 import { SHOP_LABEL } from './shops';
@@ -16,7 +17,10 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <div className="particles" aria-hidden="true" />
+      <FactionWipe faction={faction} />
       <header className="app-header">
+        <span className="header-stripe" aria-hidden="true" />
         <div className="brand">
           <FactionCrest faction={faction} />
           <div className="brand-text">

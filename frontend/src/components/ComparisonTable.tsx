@@ -1,5 +1,5 @@
 // frontend/src/components/ComparisonTable.tsx
-import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   SHOP_CODES,
   type ComparisonRow,
@@ -11,6 +11,10 @@ import {
 import { SHOP_LABEL, SHOP_TONE } from '../shops';
 import { useComparisonSort } from '../hooks/useComparisonSort';
 import { CheaperBadge } from './CheaperBadge';
+import { ProductImage } from './ProductImage';
+import { ShopLogo } from './ShopLogo';
+
+const STAGGER_CAP = 20;
 
 const SORT_GLYPH = { none: '◇', asc: '▲', desc: '▼' } as const;
 
@@ -26,6 +30,7 @@ function ariaSort(direction: 'asc' | 'desc' | 'none'): 'ascending' | 'descending
 
 interface SortableHeaderProps {
   label: string;
+  shop?: ShopCode;
   code: string;
   sortKey: SortKey;
   sort: SortState | null;
@@ -33,11 +38,12 @@ interface SortableHeaderProps {
   className: string;
 }
 
-function SortableHeader({ label, code, sortKey, sort, onSort, className }: SortableHeaderProps) {
+function SortableHeader({ label, shop, code, sortKey, sort, onSort, className }: SortableHeaderProps) {
   const direction = activeDirection(sort, sortKey);
   return (
     <th scope="col" className={className} aria-sort={ariaSort(direction)}>
       <button type="button" className="sort-btn" onClick={() => onSort(sortKey)}>
+        {shop && <ShopLogo shop={shop} />}
         <span className="sort-text">
           <span className="sort-label">{label}</span>
           <span className="th-code">{code}</span>
@@ -69,48 +75,15 @@ function OfferCell({ offer, shop }: { offer: Offer | undefined; shop: ShopCode }
   );
 }
 
-function rowImageUrl(row: ComparisonRow): string | null {
-  // SHOP_CODES order doubles as the preference order: the first shop that has a
-  // photo for this kit supplies the thumbnail.
-  for (const shop of SHOP_CODES) {
-    const imageUrl = row.offers.find((o) => o.shop === shop)?.imageUrl;
-    if (imageUrl) return imageUrl;
-  }
-  return null;
-}
-
 function findOffer(row: ComparisonRow, shop: ShopCode): Offer | undefined {
   return row.offers.find((o) => o.shop === shop);
-}
-
-function ProductThumb({ row }: { row: ComparisonRow }) {
-  const imageUrl = rowImageUrl(row);
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-
-  if (imageUrl !== null && imageUrl !== failedSrc) {
-    return (
-      <img
-        className="product-thumb"
-        src={imageUrl}
-        alt=""
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        onError={() => setFailedSrc(imageUrl)}
-      />
-    );
-  }
-  return (
-    <span className="product-thumb product-thumb-fallback" aria-hidden="true">
-      {row.grade.toUpperCase()}
-    </span>
-  );
 }
 
 function TitleCell({ row }: { row: ComparisonRow }) {
   return (
     <td className="title-cell">
       <div className="title-inner">
-        <ProductThumb row={row} />
+        <ProductImage row={row} className="table-thumb" />
         <div className="product-info">
           <span className="product-title">{row.title}</span>
           <span className="sku">{row.sku}</span>
@@ -144,6 +117,7 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
               <SortableHeader
                 key={shop}
                 label={SHOP_LABEL[shop]}
+                shop={shop}
                 code={`SHOP-${String(index + 1).padStart(2, '0')} · 價錢`}
                 sortKey={shop}
                 sort={sort}
@@ -157,8 +131,11 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row) => (
-            <tr key={`${row.grade}-${row.sku}`}>
+          {sorted.map((row, index) => (
+            <tr
+              key={`${row.grade}-${row.sku}`}
+              style={{ '--i': Math.min(index, STAGGER_CAP) } as CSSProperties}
+            >
               <TitleCell row={row} />
               {SHOP_CODES.map((shop) => (
                 <OfferCell key={shop} offer={findOffer(row, shop)} shop={shop} />

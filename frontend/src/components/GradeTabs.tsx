@@ -1,5 +1,6 @@
 // frontend/src/components/GradeTabs.tsx
 import type { Grade } from '../types';
+import { GradeEmblem } from './GradeEmblem';
 
 const GRADES: Array<{ value: Grade; label: string }> = [
   { value: 'hg', label: 'HG' },
@@ -21,8 +22,10 @@ export function GradeTabs({ value, onChange }: Props) {
           role="tab"
           aria-selected={value === g.value}
           className={value === g.value ? 'tab active' : 'tab'}
+          data-grade={g.value}
           onClick={() => onChange(g.value)}
         >
+          <GradeEmblem grade={g.value} />
           {g.label}
         </button>
       ))}

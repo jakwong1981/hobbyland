@@ -569,7 +569,7 @@ frontend/
                                   useImportFreshness
     api/                          client · comparison.api · import.api
     types/index.ts                mirrors backend DTOs (+ frontend-only types)
-    styles.css                    dark HUD theme, mobile-first
+    styles/                       dark mobile-suit HUD theme (tokens, layout, motion), mobile-first
   tests/
 scripts/                          docker-build · docker-deploy · scrape-and-import
 docs/                             see below

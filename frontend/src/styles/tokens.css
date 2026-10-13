@@ -1,0 +1,112 @@
+/* frontend/src/styles/tokens.css — palette, faction themes, shared shapes */
+
+:root {
+  color-scheme: dark;
+
+  --surface-solid: #0d121a;
+  --surface-2: #141b25;
+  --border: rgba(140, 172, 214, 0.16);
+  --border-strong: rgba(150, 186, 226, 0.34);
+  --text: #e4ebf4;
+  --text-muted: #8d9bad;
+  --text-dim: #5d6a7a;
+
+  /* Shop colours tint logos only; price text stays neutral so the faction
+     accent keeps meaning "the winner". */
+  --shop-a: #4dd0e1;
+  --shop-b: #b388ff;
+  --shop-c: #69f0ae;
+
+  --grade-hg: #3fb6ff;
+  --grade-mg: #f5a623;
+  --grade-rg: #ff4d6d;
+
+  --warning: #e8a33d;
+  --error: #e5484d;
+  --success: #57c98a;
+
+  --grid: rgba(120, 165, 220, 0.05);
+  --scanline: rgba(255, 255, 255, 0.016);
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", "Roboto Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Helvetica Neue", Arial,
+    sans-serif;
+
+  --clip-panel: polygon(
+    0 11px,
+    11px 0,
+    calc(100% - 11px) 0,
+    100% 11px,
+    100% calc(100% - 11px),
+    calc(100% - 11px) 100%,
+    11px 100%,
+    0 calc(100% - 11px)
+  );
+  --clip-chip: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* 聯邦: RX tricolour — armour white, chest blue, waist red, V-fin yellow */
+html[data-faction="federation"] {
+  --bg: #050a14;
+  --accent: #2f8cf0;
+  --accent-strong: #9bccff;
+  --accent-ink: #03101f;
+  --accent-2: #e8414a;
+  --accent-3: #f5c518;
+  --accent-4: #f4f7fb;
+  --highlight: #f5c518;
+  --glow: rgba(47, 140, 240, 0.32);
+  --glow-2: rgba(245, 197, 24, 0.22);
+  --particle: rgba(155, 204, 255, 0.55);
+}
+
+/* 自護: Char red, Zaku green, Zeon gold, mono-eye pink */
+html[data-faction="zeon"] {
+  --bg: #0b0a07;
+  --accent: #e0402f;
+  --accent-strong: #ff8472;
+  --accent-ink: #1c0705;
+  --accent-2: #6a9a43;
+  --accent-3: #d4ae3e;
+  --accent-4: #ff3d7f;
+  --highlight: #d4ae3e;
+  --glow: rgba(224, 64, 47, 0.3);
+  --glow-2: rgba(106, 154, 67, 0.24);
+  --particle: rgba(255, 132, 114, 0.5);
+}
+
+.crest[data-crest="federation"] {
+  --crest-frame: #2f8cf0;
+  --crest-mark: #f5c518;
+  --crest-core: #e8414a;
+}
+
+.crest[data-crest="zeon"] {
+  --crest-frame: #e0402f;
+  --crest-mark: #d4ae3e;
+  --crest-core: #ff3d7f;
+}
+
+.shop-a {
+  --shop: var(--shop-a);
+}
+
+.shop-b {
+  --shop: var(--shop-b);
+}
+
+.shop-c {
+  --shop: var(--shop-c);
+}
+
+[data-grade="hg"] {
+  --grade: var(--grade-hg);
+}
+
+[data-grade="mg"] {
+  --grade: var(--grade-mg);
+}
+
+[data-grade="rg"] {
+  --grade: var(--grade-rg);
+}

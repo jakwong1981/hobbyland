@@ -1,0 +1,74 @@
+/* frontend/src/styles/responsive.css — small-screen overrides */
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0 12px 40px;
+  }
+
+  .app-header {
+    margin: 14px 0 14px;
+    padding: 12px 14px 16px;
+  }
+
+  .header-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .brand .crest {
+    width: 38px;
+    height: 38px;
+  }
+
+  .brand-text h1 {
+    font-size: 1.1rem;
+  }
+
+  .toolbar {
+    gap: 10px;
+  }
+
+  .status-row .freshness {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .shop-filter {
+    flex: 1;
+  }
+
+  .shop-filter select {
+    flex: 1;
+  }
+
+  .table-wrapper {
+    max-height: 72vh;
+  }
+
+  .title-cell .product-title {
+    max-width: 170px;
+  }
+
+  .table-thumb {
+    width: 60px;
+    height: 60px;
+  }
+
+  .comparison-table {
+    font-size: 0.84rem;
+  }
+
+  .comparison-table th,
+  .comparison-table td {
+    padding: 10px;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .gallery-body {
+    padding: 9px;
+  }
+}

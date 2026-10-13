@@ -1,0 +1,12 @@
+/* frontend/src/styles/index.css — dark mobile-suit HUD, faction-switchable, mobile-first */
+@import "./tokens.css";
+@import "./base.css";
+@import "./header.css";
+@import "./hero.css";
+@import "./showcase.css";
+@import "./toolbar.css";
+@import "./table.css";
+@import "./gallery.css";
+@import "./import.css";
+@import "./responsive.css";
+@import "./motion.css";

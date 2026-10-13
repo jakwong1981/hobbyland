@@ -1,0 +1,311 @@
+/* frontend/src/styles/table.css — comparison grid, thumbnails, prices, verdict badge */
+
+.table-wrapper {
+  overflow: auto;
+  max-height: max(340px, calc(100vh - 260px));
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  clip-path: var(--clip-panel);
+  scrollbar-color: var(--accent) var(--surface-2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+}
+
+.comparison-table {
+  width: 100%;
+  /* `separate` rather than `collapse`: collapsing borders are unreliable on a
+     sticky cell in some engines. Cells only draw bottom/left rules, so the
+     visual result is identical. */
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.9rem;
+}
+
+/* Frozen column header: the fill must be opaque or rows scroll visibly through
+   it, and the rule underneath is an inset shadow so it stays crisp while pinned. */
+.comparison-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 11px 14px 10px;
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent);
+  background-color: var(--surface-2);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  text-align: left;
+  vertical-align: bottom;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.th-code {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  color: var(--accent-3);
+  opacity: 0.8;
+}
+
+.shop-head {
+  color: var(--text);
+}
+
+.sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sort-btn .shop-logo {
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--shop) 50%, transparent));
+}
+
+.sort-text {
+  display: grid;
+}
+
+.sort-indicator {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+
+.sort-btn:hover .sort-label {
+  color: var(--text);
+}
+
+.sort-btn:hover .sort-indicator {
+  color: var(--accent);
+}
+
+th[aria-sort="ascending"] .sort-label,
+th[aria-sort="descending"] .sort-label {
+  color: var(--text);
+}
+
+th[aria-sort="ascending"] .sort-indicator,
+th[aria-sort="descending"] .sort-indicator {
+  color: var(--accent-3);
+  text-shadow: 0 0 10px var(--glow-2);
+}
+
+.comparison-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.comparison-table tbody tr {
+  transition: background 0.2s;
+}
+
+.comparison-table tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.comparison-table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.comparison-table tbody tr:hover {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
+}
+
+.comparison-table tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Class selectors rather than nth-child: every shop column gets its divider. */
+.comparison-table td.price-cell,
+.comparison-table th.shop-head {
+  border-left: 1px solid var(--border);
+}
+
+/* ---------- title cell ---------- */
+
+.title-cell .title-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.product-thumb {
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  clip-path: var(--clip-chip);
+}
+
+.table-thumb {
+  width: 88px;
+  height: 88px;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.comparison-table tbody tr:hover .table-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 18px var(--glow);
+}
+
+.product-thumb-fallback {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--grade);
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--grade) 22%, transparent), transparent 70%),
+    var(--surface-2);
+  color: var(--grade);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.title-cell .product-info {
+  min-width: 0;
+}
+
+.title-cell .product-title {
+  display: block;
+  max-width: 420px;
+}
+
+.sku {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.71rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* ---------- price cell ---------- */
+
+.price-cell .price-link {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.price-cell .price-link:hover {
+  border-bottom-color: var(--shop);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--shop) 60%, transparent);
+}
+
+.price-cell .price-link .external-icon {
+  margin-left: 4px;
+  font-size: 0.72em;
+  color: var(--shop);
+}
+
+.price-cell .regular-price {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.price-cell .stock-note {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 0.69rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.price-cell .stock-note.preorder {
+  color: var(--warning);
+}
+
+.price-cell.empty {
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+
+/* ---------- verdict badge ---------- */
+
+.badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 8px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  clip-path: var(--clip-chip);
+  overflow: hidden;
+}
+
+.badge .shop-logo {
+  width: 16px;
+  height: 16px;
+}
+
+.badge-cheaper {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: var(--accent-ink);
+  box-shadow: 0 0 16px var(--glow);
+}
+
+.badge-cheaper .shop-logo-shape {
+  fill: rgba(255, 255, 255, 0.35);
+  stroke: var(--accent-ink);
+}
+
+.badge-cheaper .shop-logo-text {
+  fill: var(--accent-ink);
+}
+
+/* Shine sweep — animated in motion.css */
+.badge-cheaper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+}
+
+.badge-exclusive {
+  border-color: rgba(232, 163, 61, 0.55);
+  background: rgba(232, 163, 61, 0.1);
+  color: var(--warning);
+}
+
+.badge-tie,
+.badge-none {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}

@@ -1,0 +1,196 @@
+/* frontend/src/styles/header.css */
+
+.app-header {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 20px 0 18px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border-strong);
+  background-image:
+    linear-gradient(135deg, var(--glow), transparent 55%),
+    linear-gradient(315deg, var(--glow-2), transparent 45%);
+  background-color: var(--surface-solid);
+  clip-path: var(--clip-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* Faction stripe along the bottom edge, with a travelling light bar */
+.header-stripe {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 4px;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    var(--accent-4) 0 25%,
+    var(--accent) 25% 50%,
+    var(--accent-2) 50% 75%,
+    var(--accent-3) 75% 100%
+  );
+}
+
+.header-stripe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+  transform: translateX(-120%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand .crest {
+  width: 46px;
+  height: 46px;
+  filter: drop-shadow(0 0 10px var(--glow));
+}
+
+.brand-text h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  background: linear-gradient(90deg, var(--accent-4), var(--accent-strong) 55%, var(--accent-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-sub {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.header-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+nav {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- faction toggle ---------- */
+
+.faction-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  clip-path: var(--clip-chip);
+}
+
+.faction-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.3s;
+}
+
+.faction-btn:last-child {
+  border-right: none;
+}
+
+.faction-btn:hover {
+  color: var(--text);
+}
+
+.faction-btn .crest {
+  width: 18px;
+  height: 18px;
+}
+
+.faction-text {
+  display: grid;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.faction-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.faction-sub {
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.14em;
+  opacity: 0.7;
+}
+
+.faction-btn.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: var(--accent-ink);
+  box-shadow: 0 0 18px var(--glow);
+}
+
+.faction-btn.active .crest-frame {
+  stroke: var(--accent-ink);
+}
+
+.faction-btn.active .crest-mark,
+.faction-btn.active .crest-core {
+  fill: var(--accent-ink);
+}
+
+/* ---------- faction switch wipe ---------- */
+
+.faction-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.faction-wipe[data-wipe="federation"] {
+  background: linear-gradient(
+    115deg,
+    transparent 0 30%,
+    #f4f7fb 30% 40%,
+    #2f8cf0 40% 55%,
+    #e8414a 55% 65%,
+    #f5c518 65% 72%,
+    transparent 72%
+  );
+}
+
+.faction-wipe[data-wipe="zeon"] {
+  background: linear-gradient(
+    115deg,
+    transparent 0 30%,
+    #6a9a43 30% 42%,
+    #e0402f 42% 58%,
+    #d4ae3e 58% 66%,
+    #ff3d7f 66% 70%,
+    transparent 70%
+  );
+}

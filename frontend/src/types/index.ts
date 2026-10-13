@@ -8,6 +8,7 @@ export type Grade = (typeof GRADES)[number];
 
 export type CheapestShop = ShopCode | 'tie' | null;
 export type Faction = 'federation' | 'zeon';
+export type DashboardView = 'table' | 'gallery';
 
 export type ShopFilterValue = ShopCode | 'all';
 export type SortKey = 'title' | ShopCode;

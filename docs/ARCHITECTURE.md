@@ -84,6 +84,59 @@ classDiagram
     ProductRepository --> "node:sqlite" DatabaseSync
 ```
 
+### Frontend component hierarchy
+
+```mermaid
+graph TD
+    App --> FactionWipe
+    App --> FactionCrest
+    App --> FactionToggle
+    App --> DashboardPage
+    App --> ImportPage
+    DashboardPage --> HeroBanner
+    DashboardPage --> KitShowcase
+    DashboardPage --> GradeTabs
+    DashboardPage --> ShopFilter
+    DashboardPage --> SearchBar
+    DashboardPage --> ViewToggle
+    DashboardPage --> FreshnessBar
+    DashboardPage --> ComparisonTable
+    DashboardPage --> ComparisonGallery
+    HeroBanner --> MobileSuitArt
+    HeroBanner --> StatTile
+    StatTile --> useCountUp
+    useCountUp --> usePrefersReducedMotion
+    HeroBanner -.-> summarizeComparisons
+    KitShowcase -.-> selectShowcaseKits
+    KitShowcase --> ShopLogo
+    GradeTabs --> GradeEmblem
+    FreshnessBar --> ShopLogo
+    ComparisonTable --> ProductImage
+    ComparisonTable --> CheaperBadge
+    ComparisonTable --> ShopLogo
+    ComparisonGallery --> ProductImage
+    ComparisonGallery --> CheaperBadge
+    ComparisonGallery --> GradeEmblem
+    CheaperBadge --> ShopLogo
+    ProductImage -.-> productImageUrl
+    selectShowcaseKits -.-> productImageUrl
+```
+
+### Dashboard view state
+
+```mermaid
+stateDiagram-v2
+    [*] --> Table
+    Table --> Gallery: 圖鑑
+    Gallery --> Table: 表格
+    state Table {
+        [*] --> Unsorted
+        Unsorted --> Asc: click header
+        Asc --> Desc: click same header
+        Desc --> Asc: click same header
+    }
+```
+
 ## 4. Data Model
 
 ```mermaid

@@ -2,6 +2,7 @@
 import type { Grade, ImportFreshness } from '../types';
 import { SHOP_CODES } from '../types';
 import { SHOP_LABEL } from '../shops';
+import { ShopLogo } from './ShopLogo';
 
 const GRADE_LABEL: Record<Grade, string> = { hg: 'HG', mg: 'MG', rg: 'RG' };
 
@@ -39,11 +40,13 @@ export function FreshnessBar({ freshness, isLoading }: Props) {
   const grade = freshness.grade === null ? null : GRADE_LABEL[freshness.grade];
   return (
     <p className="freshness">
+      <span className="live-dot" aria-hidden="true" />
       <span className="freshness-label">最後更新{grade === null ? '' : ` · ${grade}`}</span>
       {SHOP_CODES.map((shop) => {
         const stamp = freshness.byShop[shop];
         return (
           <span key={shop} className="freshness-item">
+            <ShopLogo shop={shop} />
             <span className="freshness-shop">{SHOP_LABEL[shop]}</span>
             {stamp === null ? (
               <span className="freshness-none">冇紀錄</span>

@@ -18,10 +18,16 @@ export const SHOP_SHORT_LABEL: Record<ShopCode, string> = {
   'hobbydigi': 'HobbyDigi',
 };
 
-// Shops are told apart by neutral value only, never by faction colour — see the
-// --shop-* tokens in styles.css.
+// Tone classes drive each shop's logo colour (see --shop-* tokens in styles/tokens.css).
+// Price text stays neutral so the faction accent keeps meaning "the winner".
 export const SHOP_TONE: Record<ShopCode, string> = {
   'hobbyland': 'shop-a',
   'animes-pro': 'shop-b',
   'hobbydigi': 'shop-c',
+};
+
+export const SHOP_MONOGRAM: Record<ShopCode, string> = {
+  'hobbyland': 'HL',
+  'animes-pro': 'AP',
+  'hobbydigi': 'HD',
 };

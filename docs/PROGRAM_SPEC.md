@@ -31,22 +31,33 @@ hobbyland/
 │   └── tests/                   # vitest: comparison, import, api (supertest)
 ├── frontend/
 │   ├── index.html               # data-faction bootstrap (pre-paint theme) + SPA root
-│   ├── tests/                   # vitest + RTL (jsdom): components, dashboard, faction, sort-filter, api client
+│   ├── tests/                   # vitest + RTL (jsdom): components, dashboard, faction, sort-filter, api client,
+│   │                            #   comparison-stats, count-up, layout (hero/showcase/gallery/wipe/view toggle)
 │   └── src/
 │       ├── main.tsx             # React root + QueryClientProvider
 │       ├── App.tsx              # shell + page switch + faction theme owner
-│       ├── types/index.ts       # mirrors backend DTOs (+ frontend-only Faction / ShopFilterValue / SortState)
+│       ├── types/index.ts       # mirrors backend DTOs (+ frontend-only Faction / DashboardView / ShopFilterValue / SortState)
+│       ├── shops.ts             # SHOP_LABEL / SHOP_SHORT_LABEL / SHOP_TONE / SHOP_MONOGRAM
 │       ├── api/client.ts        # fetch wrapper (apiGet / apiUpload)
 │       ├── api/comparison.api.ts  api/import.api.ts
 │       ├── hooks/useComparisons.ts              # TanStack Query
 │       ├── hooks/useFaction.ts                  # localStorage ↔ <html data-faction>
 │       ├── hooks/useComparisonSort.ts           # client-side title/price sort, missing shop trails
 │       ├── hooks/useImportFreshness.ts          # last-import timestamp per shop, grade-scoped
+│       ├── hooks/usePrefersReducedMotion.ts     # matchMedia listener (cleaned up on unmount)
+│       ├── hooks/useCountUp.ts                  # rAF tween for stat numbers; instant under reduced motion
+│       ├── utils/productImage.ts                # first shop (SHOP_CODES order) with a photo
+│       ├── utils/comparisonStats.ts             # summarizeComparisons → hero stat counts
+│       ├── utils/showcase.ts                    # selectShowcaseKits → photo strip (top saving, max 16)
 │       ├── components/{GradeTabs,SearchBar,ShopFilter,ComparisonTable,CheaperBadge}.tsx
 │       ├── components/FreshnessBar.tsx                    # last-update readout
-│       ├── components/{FactionCrest,FactionToggle}.tsx   # inline-SVG emblem + theme switch
+│       ├── components/{FactionCrest,FactionToggle,FactionWipe}.tsx   # emblem, theme switch, switch transition
+│       ├── components/{ShopLogo,GradeEmblem,MobileSuitArt}.tsx       # inline-SVG logos & original line art
+│       ├── components/{HeroBanner,StatTile,KitShowcase}.tsx          # mission banner + kit photo strip
+│       ├── components/{ViewToggle,ComparisonGallery,ProductImage}.tsx # 表格/圖鑑 switch, card grid, photo w/ fallback
 │       ├── pages/{DashboardPage,ImportPage}.tsx
-│       └── styles.css           # dark HUD cockpit theme, mobile-first
+│       └── styles/              # index.css imports tokens, base, header, hero, showcase, toolbar,
+│                                #   table, gallery, import, responsive, motion (all animation)
 └── docs/
 ```
 
@@ -121,6 +132,9 @@ extra round trip is made when the user sorts or filters.
 | Search box | `DashboardPage` | refetches (server-side `q` param) |
 | 有售舖頭 select | `DashboardPage` | filters the fetched rows to those whose `offers` include the chosen shop; default `all`. Count reads `N 個 SKU`, or `M / N 個 SKU` while filtered |
 | Column sort | `useComparisonSort` (inside `ComparisonTable`) | `title` and each shop's price are sortable; click cycles asc → desc. `null` sort = the backend's SKU order. A shop that does not carry the SKU has no price and always sorts last, in both directions |
+| 表格 / 圖鑑 toggle | `DashboardPage` (`view`) | swaps `ComparisonTable` ↔ `ComparisonGallery` over the same filtered rows; default `table`. Gallery keeps the incoming order (column sort is table-only) |
+| Hero stats | `HeroBanner` | `summarizeComparisons(rows)` over the fetched (unfiltered) rows: total, cheapest-wins per shop, exclusives; numbers count up via `useCountUp` |
+| Kit showcase | `KitShowcase` | up to 16 rows with a photo, largest `saving` first; each links to the lowest-priced offer; a photo that fails to load drops its kit |
 | Last-update readout | `useImportFreshness` | refetches with the grade; one `<time dateTime>` per shop, 「冇紀錄」for a shop never imported at that grade, and separate loading / failed states |
 
 Sorting is announced through `aria-sort` on the `<th>`, and the clickable region is a real `<button>`

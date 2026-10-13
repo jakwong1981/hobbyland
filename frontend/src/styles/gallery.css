@@ -1,0 +1,129 @@
+/* frontend/src/styles/gallery.css — 圖鑑 card view */
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 14px;
+}
+
+.gallery-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  clip-path: var(--clip-panel);
+  transition:
+    transform 0.25s,
+    border-color 0.25s,
+    box-shadow 0.25s;
+}
+
+.gallery-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px var(--glow);
+}
+
+.gallery-media {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.gallery-image {
+  width: 100%;
+  height: 100%;
+  border: none;
+  clip-path: none;
+  transition: transform 0.45s ease;
+}
+
+.gallery-card:hover .gallery-image {
+  transform: scale(1.07);
+}
+
+.gallery-image.product-thumb-fallback {
+  font-size: 2rem;
+}
+
+.gallery-grade {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.6);
+  clip-path: var(--clip-chip);
+}
+
+.gallery-grade .grade-emblem {
+  width: 18px;
+  height: 18px;
+}
+
+.gallery-body {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.gallery-body .product-title {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gallery-offers {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gallery-offer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  border-left: 2px solid transparent;
+}
+
+.gallery-offer.winner {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+.gallery-offer-shop {
+  flex: 1;
+}
+
+.gallery-offer-price {
+  font-family: var(--mono);
+  font-weight: 650;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.gallery-offer-price:hover {
+  color: var(--shop);
+}
+
+.gallery-offer-price.empty {
+  color: var(--text-dim);
+}
+
+.gallery-body .badge {
+  justify-self: start;
+}

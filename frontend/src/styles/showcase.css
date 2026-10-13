@@ -1,0 +1,91 @@
+/* frontend/src/styles/showcase.css — auto-scrolling kit photo strip */
+
+.showcase {
+  margin-bottom: 16px;
+}
+
+.showcase-viewport {
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+.showcase-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  margin: 0;
+  padding: 12px 0;
+  list-style: none;
+}
+
+.showcase-viewport:hover .showcase-track,
+.showcase-viewport:focus-within .showcase-track {
+  animation-play-state: paused;
+}
+
+.showcase-item {
+  flex-shrink: 0;
+}
+
+.showcase-link {
+  position: relative;
+  display: block;
+  width: 132px;
+  height: 132px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  clip-path: var(--clip-chip);
+  overflow: hidden;
+  transition:
+    transform 0.25s,
+    box-shadow 0.25s,
+    border-color 0.25s;
+}
+
+.showcase-link img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.showcase-link:hover,
+.showcase-link:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 0 22px var(--glow);
+}
+
+.showcase-link:hover img {
+  transform: scale(1.1);
+}
+
+.showcase-price {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 8px 5px;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.85));
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.showcase-price .shop-logo {
+  width: 15px;
+  height: 15px;
+}
+
+@media (min-width: 720px) {
+  .showcase-link {
+    width: 156px;
+    height: 156px;
+  }
+}

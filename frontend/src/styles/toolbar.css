@@ -1,0 +1,175 @@
+/* frontend/src/styles/toolbar.css — filters, view switch, freshness */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.grade-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab {
+  font-family: var(--mono);
+  font-weight: 650;
+}
+
+.tab.active {
+  background: color-mix(in srgb, var(--grade) 22%, var(--surface-solid));
+  border-color: var(--grade);
+  color: var(--text);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--grade) 40%, transparent);
+}
+
+.view-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.view-glyph {
+  font-size: 0.9rem;
+}
+
+.shop-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shop-filter-label {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.shop-filter select {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 0.84rem;
+  clip-path: var(--clip-chip);
+  cursor: pointer;
+}
+
+.shop-filter select:hover {
+  border-color: var(--border-strong);
+}
+
+.shop-filter select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 14px var(--glow);
+}
+
+.search-bar {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  clip-path: var(--clip-chip);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.search-bar::placeholder {
+  color: var(--text-dim);
+}
+
+.search-bar:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 16px var(--glow);
+}
+
+/* ---------- status & freshness ---------- */
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.status-row .status,
+.status-row .freshness {
+  margin: 0;
+}
+
+.status-row .freshness {
+  margin-left: auto;
+}
+
+.freshness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent-3);
+  background: var(--surface-solid);
+  clip-path: var(--clip-chip);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.freshness-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  color: var(--accent-3);
+}
+
+.freshness-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.freshness-item .shop-logo {
+  width: 15px;
+  height: 15px;
+}
+
+.freshness-item + .freshness-item {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.freshness-shop {
+  color: var(--text-muted);
+}
+
+.freshness-time {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.freshness-none {
+  color: var(--text-dim);
+}

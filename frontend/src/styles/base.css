@@ -1,0 +1,196 @@
+/* frontend/src/styles/base.css — page canvas, logos, shared controls */
+
+* {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+html,
+body {
+  transition: background-color 0.5s ease;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.5;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 55% at 12% -10%, var(--glow), transparent 62%),
+    radial-gradient(ellipse 70% 50% at 95% 8%, var(--glow-2), transparent 60%),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    46px 46px,
+    46px 46px;
+  background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, var(--scanline) 0 1px, transparent 1px 3px);
+}
+
+/* Minovsky particles: two dot fields drifting at different speeds */
+.particles {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20px 30px, var(--particle), transparent 60%),
+    radial-gradient(1px 1px at 140px 90px, var(--particle), transparent 60%),
+    radial-gradient(2px 2px at 260px 180px, var(--particle), transparent 60%),
+    radial-gradient(1px 1px at 80px 220px, var(--accent-3), transparent 60%),
+    radial-gradient(1.5px 1.5px at 330px 40px, var(--accent-2), transparent 60%);
+  background-size: 360px 260px;
+}
+
+.app-shell {
+  position: relative;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 16px 56px;
+}
+
+/* ---------- logos ---------- */
+
+.crest {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.crest-frame {
+  fill: none;
+  stroke: var(--crest-frame);
+  stroke-width: 1.6;
+}
+
+.crest-mark {
+  fill: var(--crest-mark);
+}
+
+.crest-core {
+  fill: var(--crest-core);
+}
+
+.shop-logo {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.shop-logo-shape {
+  fill: color-mix(in srgb, var(--shop) 18%, transparent);
+  stroke: var(--shop);
+  stroke-width: 1.4;
+}
+
+.shop-logo-text {
+  fill: var(--shop);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.grade-emblem {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.grade-emblem-outer {
+  fill: none;
+  stroke: var(--grade);
+  stroke-width: 1.4;
+}
+
+.grade-emblem-inner {
+  fill: var(--grade);
+}
+
+/* ---------- buttons & readouts ---------- */
+
+.nav-btn,
+.tab,
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  color: var(--text-muted);
+  font-family: var(--sans);
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  clip-path: var(--clip-chip);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
+}
+
+.nav-btn:hover,
+.tab:hover,
+.view-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.nav-btn.active,
+.view-btn.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+  box-shadow: 0 0 18px var(--glow);
+}
+
+.result-count,
+.status,
+.empty-state {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.result-count::before {
+  content: "▸ ";
+  color: var(--accent-3);
+}
+
+.status.error {
+  color: var(--error);
+}
+
+.status.success {
+  color: var(--success);
+}
+
+.empty-state {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--text-dim);
+}
