@@ -166,7 +166,6 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
               <td className="badge-cell">
                 <CheaperBadge
                   cheapestShop={row.cheapestShop}
-                  saving={row.saving}
                   exclusiveShop={row.exclusiveShop}
                 />
               </td>

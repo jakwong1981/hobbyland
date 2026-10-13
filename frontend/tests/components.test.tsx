@@ -10,34 +10,35 @@ import { SearchBar } from '../src/components/SearchBar';
 import { buildFreshness, buildOffer, buildRow } from './fixtures';
 
 describe('CheaperBadge', () => {
-  it('shows the cheaper shop with the saving', () => {
-    render(<CheaperBadge cheapestShop="hobbyland" saving={22} exclusiveShop={null} />);
-    expect(screen.getByText('Hobbyland 平 HK$22')).toBeInTheDocument();
+  it('names the cheapest shop without the saving amount', () => {
+    render(<CheaperBadge cheapestShop="hobbyland" exclusiveShop={null} />);
+    expect(screen.getByText('Hobbyland 最平')).toBeInTheDocument();
+    expect(screen.queryByText(/HK\$/)).not.toBeInTheDocument();
   });
 
   it('shows a tie label for equal prices', () => {
-    render(<CheaperBadge cheapestShop="tie" saving={0} exclusiveShop={null} />);
+    render(<CheaperBadge cheapestShop="tie" exclusiveShop={null} />);
     expect(screen.getByText('同價')).toBeInTheDocument();
   });
 
   it('labels a single-shop SKU as the only shop in stock instead of the cheaper one', () => {
-    render(<CheaperBadge cheapestShop="animes-pro" saving={null} exclusiveShop="animes-pro" />);
+    render(<CheaperBadge cheapestShop="animes-pro" exclusiveShop="animes-pro" />);
     expect(screen.getByText('只有 Animes 有貨')).toBeInTheDocument();
-    expect(screen.queryByText(/平/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/最平/)).not.toBeInTheDocument();
   });
 
   it('labels a hobbyland-exclusive SKU with the hobbyland name', () => {
-    render(<CheaperBadge cheapestShop="hobbyland" saving={null} exclusiveShop="hobbyland" />);
+    render(<CheaperBadge cheapestShop="hobbyland" exclusiveShop="hobbyland" />);
     expect(screen.getByText('只有 Hobbyland 有貨')).toBeInTheDocument();
   });
 
   it('prefers the exclusive label over a tie or cheapest verdict', () => {
-    render(<CheaperBadge cheapestShop="tie" saving={0} exclusiveShop="hobbyland" />);
+    render(<CheaperBadge cheapestShop="tie" exclusiveShop="hobbyland" />);
     expect(screen.getByText('只有 Hobbyland 有貨')).toBeInTheDocument();
   });
 
   it('shows a dash when there is no cheapest shop', () => {
-    render(<CheaperBadge cheapestShop={null} saving={null} exclusiveShop={null} />);
+    render(<CheaperBadge cheapestShop={null} exclusiveShop={null} />);
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 });
@@ -53,7 +54,7 @@ describe('ComparisonTable', () => {
     expect(screen.getByText('HG Gundam')).toBeInTheDocument();
     expect(screen.getByText(/HK\$78/)).toBeInTheDocument();
     expect(screen.getByText(/HK\$100/)).toBeInTheDocument();
-    expect(screen.getByText('Hobbyland 平 HK$22')).toBeInTheDocument();
+    expect(screen.getByText('Hobbyland 最平')).toBeInTheDocument();
   });
 
   it('renders a placeholder and the exclusive label for a single-shop SKU', () => {

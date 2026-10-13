@@ -108,7 +108,7 @@ with no migration and no re-import.
 
 `cheapestShop` answers "who would win the `cheaper=` filter"; `exclusiveShop` answers "was there a
 race at all". The UI must branch on `exclusiveShop` first — a single-offer SKU renders
-「只有 <Shop> 有貨」, never「<Shop> 平」. See FUNCTION_SPEC §3.
+「只有 <Shop> 有貨」, never「<Shop> 最平」. See FUNCTION_SPEC §3.
 
 ## 4. Dashboard Interaction Contract
 

@@ -13,7 +13,7 @@
    produces one `import_batches` record.
 3. Dashboard queries `/api/comparisons`; the backend joins every shop's products, groups by
    `(grade, sku)`, and computes the cheapest shop, the saving against the runner-up, and whether
-   only one shop carries the SKU. The UI badges the verdict —「<Shop> 平 HK$N」,「同價」, or
+   only one shop carries the SKU. The UI badges the verdict —「<Shop> 最平」,「同價」, or
    「只有 <Shop> 有貨」.
 4. Dashboard also queries `/api/imports/freshness?grade=` and shows one last-import timestamp per
    shop above the grid. The shops are scraped independently and drift apart, so freshness is
@@ -35,15 +35,15 @@
 - Group key = `(grade, sku)` — the same JAN in HG and MG listings stays separate.
 - `offers` sorted ascending by price, one per shop that stocks the SKU.
 - Two or more offers, one uniquely lowest → `cheapestShop` = that shop, `saving` = the gap to the
-  **runner-up** (rounded to 2 dp), `exclusiveShop = null`. Badge:「<Shop> 平 HK$N」. With two shops
-  the runner-up is the only rival; with three it is the next-best alternative, which is the number a
-  buyer actually cares about.
+  **runner-up** (rounded to 2 dp), `exclusiveShop = null`. Badge:「<Shop> 最平」. `saving` stays in the
+  API but is not rendered: the verdict names the winner only. With two shops the runner-up is the only
+  rival; with three it is the next-best alternative, which is the number a buyer actually cares about.
 - More than one offer at the lowest price → `cheapestShop = 'tie'`, `saving = 0`,
   `exclusiveShop = null`. Badge:「同價」. The test counts every offer level with the lowest price
   rather than comparing the top two, so a tie between the first and a later shop is still a tie.
 - Single-shop SKU → `exclusiveShop` = that shop, `saving = null`. Badge:「只有 <Shop> 有貨」.
   `cheapestShop` still carries that shop so the `cheaper=` filter keeps matching it, but the UI must
-  not render a price-comparison verdict: a lone offer never won anything, so「<Shop> 平」is wrong.
+  not render a price-comparison verdict: a lone offer never won anything, so「<Shop> 最平」is wrong.
   `exclusiveShop` exists so the badge reads the verdict instead of inferring it from `saving === null`.
   This is the majority case — 276 of 487 groups as of 2026-10-12.
 - A SKU carried by exactly two of three shops yields `exclusiveShop = null`; the grid already shows

@@ -20,8 +20,8 @@ promotions, and — critically — **carry different subsets of the catalogue**.
 `(grade, sku)` groups, 211 are sold by more than one shop; **276 are exclusive to one**.
 
 That distribution drives the central design constraint: a naive "cheapest shop" badge is wrong more
-often than it is right, because a lone offer cannot win a price comparison. Saying「Animes 平」
-("Animes is cheaper") for a kit Hobbyland does not even list is not a rounding error, it is a
+often than it is right, because a lone offer cannot win a price comparison. Saying「Animes 最平」
+("Animes is cheapest") for a kit Hobbyland does not even list is not a rounding error, it is a
 different claim. The verdict model is therefore explicit about which situation it is in
 (see [§4.2](#42-the-verdict-contract)).
 
@@ -46,7 +46,7 @@ Secondary goals:
 | Area | Behaviour |
 |---|---|
 | **Comparison grid** | One row per `(grade, sku)`, every shop's price side by side, sale vs. regular price, stock / pre-order note, product thumbnail |
-| **Verdict badge** | 「<Shop> 平 HK$N」when several sell it and prices differ, 「同價」when the lowest is shared, 「只有 <Shop> 有貨」when only one carries it |
+| **Verdict badge** | 「<Shop> 最平」when several sell it and prices differ, 「同價」when the lowest is shared, 「只有 <Shop> 有貨」when only one carries it |
 | **Frozen, sortable header** | Column header stays pinned while the grid scrolls; 產品 and every price column sort asc/desc |
 | **Shop filter** | 有售舖頭 select narrows to the SKUs a given shop carries (default 全部) |
 | **Last-update readout** | Per-shop import timestamp for the grade being viewed, so a stale scrape is visible at a glance |
@@ -166,7 +166,7 @@ flowchart TD
     S -->|"1"| E["exclusiveShop = that shop<br/>saving = null<br/>badge:「只有 &lt;Shop&gt; 有貨」"]
     S -->|"≥2"| Q{"more than one offer<br/>at the lowest price?"}
     Q -->|yes| T["cheapestShop = 'tie'<br/>saving = 0<br/>badge:「同價」"]
-    Q -->|no| W["cheapestShop = lowest shop<br/>saving = gap to runner-up<br/>badge:「&lt;Shop&gt; 平 HK$N」"]
+    Q -->|no| W["cheapestShop = lowest shop<br/>saving = gap to runner-up<br/>badge:「&lt;Shop&gt; 最平」"]
 ```
 
 `saving` therefore means *"versus the next-best alternative"*, not *"versus one specific rival"*.
@@ -524,7 +524,7 @@ pnpm test        # backend 34/34 · frontend 47/47
 | `comparison.service.test.ts` | node | Verdict computation: cheaper + saving, tie, single-shop, `exclusiveShop`, grade separation, SKU ordering, deterministic group title, and N-way offers (runner-up saving, bottom-two tie, three-way tie) |
 | `import.service.test.ts` | node + in-memory SQLite | CSV parsing, validation/skip rules, batch records, upsert idempotency, `image_url` mapping and **preservation**, `buildFreshness` (per-shop, latest-overall, absent shop → null, shop outside `SHOP_CODES` still counted) |
 | `api.test.ts` | node + supertest | All five endpoints, status codes, `traceId` on validation failure, freshness scoping by grade and the unscoped case |
-| `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (every shop listed, one or more missing, no history, loading, failed), tabs, search |
+| `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「最平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (every shop listed, one or more missing, no history, loading, failed), tabs, search |
 | `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter (option count derived from `SHOP_CODES.length + 1`), filtered counts, filter-specific empty state |
 | `faction.test.tsx` | jsdom + RTL | Theme default, persistence across mounts, `<html data-faction>` mirroring, unknown-value fallback |
 | `dashboard.test.tsx` | jsdom + RTL | API client unwrapping and `ApiError`, query-string building, refetch on grade change, the freshness request is grade-scoped and its timestamps render on the page, error surfacing |
