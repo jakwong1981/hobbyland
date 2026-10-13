@@ -128,12 +128,20 @@ RETRY_WAIT_S = 3        # pause between retries when the shop gives no wait
 PAGE_WAIT_S = 1.5       # polite delay between page requests
 MAX_RETRY_WAIT_S = 90   # cap a hostile Retry-After value
 
-# --- animes-pro browser tuning (Shopify bot protection) ---
-AP_HEADLESS = True          # set False to watch the challenge being solved
-AP_CHALLENGE_WAIT_S = 45    # budget for the bv challenge to clear
+# --- Browser tuning, shared by the two bot-protected shops ---
+HEADLESS = True             # set False to watch a challenge being solved
+AP_CHALLENGE_WAIT_S = 45    # budget for Shopify's bv challenge to clear
 
 # --- hobbydigi browser tuning (Cloudflare) ---
-HD_CHALLENGE_RETRIES = 4    # interstitial reloads before giving up on a page
+# Cloudflare budgets requests per cookie jar, and that budget does not recover
+# with time (retested at +60s and +120s, still 403) — so waiting inside a
+# challenged browser is wasted effort. Only a brand-new browser resets it. Hence
+# several browsers per page with a short selector budget inside each, rather than
+# one browser waiting out a block it can never outlast.
+HD_BROWSER_ATTEMPTS = 3     # fresh browsers per page before giving up
+HD_BROWSER_BACKOFF_S = 8    # pause before relaunching
+HD_CHALLENGE_RETRIES = 2    # interstitial auto-clear checks inside one browser
+HD_CHALLENGE_WAIT_S = 20    # selector budget inside one browser
 HD_MAX_PAGES = 40           # safety guard; the real total is discovered at runtime
 
 # Raw cards are persisted so the match-review script can propose candidates
@@ -397,7 +405,7 @@ def _solve_animes_pro_challenge(page, collection_handle):
     if not _wait_animes_pro_listing(page):
         raise RuntimeError(
             f"Shopify bot challenge did not clear for {url} "
-            f"(now at {page.url}) — set AP_HEADLESS = False to watch")
+            f"(now at {page.url}) — set HEADLESS = False to watch")
 
 
 def _wait_animes_pro_listing(page, timeout_s=AP_CHALLENGE_WAIT_S):
@@ -431,7 +439,7 @@ def scrape_animes_pro_category(collection_handle):
     base = f"{ANIME_PRO_BASE_URL}/collections/{collection_handle}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=AP_HEADLESS)
+        browser = p.chromium.launch(headless=HEADLESS)
         context = browser.new_context(
             user_agent=USER_AGENT,
             viewport={"width": 1920, "height": 1080},
@@ -585,28 +593,47 @@ def _hobbydigi_page(page, url, budget_s):
             page.wait_for_timeout(5000)
     raise RuntimeError(
         f"Cloudflare challenge did not clear for {url} (now at {page.url}) "
-        f"— set AP_HEADLESS = False to watch")
+        f"— set HEADLESS = False to watch")
 
 
 def _hobbydigi_page_isolated(playwright, url):
-    """Load one listing page in its own browser and context.
+    """Load one listing page in its own browser, relaunching if it gets blocked.
 
     Cloudflare budgets requests per cookie jar — roughly two or three — and the
     budget does not recover with time (retested at +60s and +120s, still 403).
-    A fresh context gets a fresh budget, which is what turns a 2-page crawl into
+    A fresh browser gets a fresh budget, which is what turns a 2-page crawl into
     a complete one: measured 8 pages / 224 cards with zero blocks, where a single
     reused context died on page 3.
+
+    The same remedy applies to one page hit by a transient challenge, so the
+    relaunch is retried here rather than only across pages. Without it a single
+    unlucky interstitial on page 1 aborts the whole crawl — observed in
+    production — even though the identical load seconds later returns 28 cards.
+    Every transient failure class is reported as a RuntimeError so the caller's
+    partial-catalogue salvage still applies.
     """
-    browser = playwright.chromium.launch(headless=AP_HEADLESS)
-    try:
-        context = browser.new_context(
-            user_agent=USER_AGENT,
-            viewport={"width": 1920, "height": 1080},
-            locale="zh-HK",
-        )
-        return _hobbydigi_page(context.new_page(), url, AP_CHALLENGE_WAIT_S)
-    finally:
-        browser.close()
+    last = None
+    for attempt in range(1, HD_BROWSER_ATTEMPTS + 1):
+        browser = playwright.chromium.launch(headless=HEADLESS)
+        try:
+            context = browser.new_context(
+                user_agent=USER_AGENT,
+                viewport={"width": 1920, "height": 1080},
+                locale="zh-HK",
+            )
+            return _hobbydigi_page(context.new_page(), url, HD_CHALLENGE_WAIT_S)
+        except Exception as exc:
+            last = exc
+            if attempt < HD_BROWSER_ATTEMPTS:
+                print(f"   ⚠️  blocked on {url} (attempt {attempt}/"
+                      f"{HD_BROWSER_ATTEMPTS}) — fresh browser in "
+                      f"{HD_BROWSER_BACKOFF_S}s")
+                time.sleep(HD_BROWSER_BACKOFF_S)
+        finally:
+            browser.close()
+    raise RuntimeError(
+        f"{url} still blocked after {HD_BROWSER_ATTEMPTS} fresh browsers: {last}"
+    ) from last
 
 
 def _hobbydigi_grades(cards, api_key):
