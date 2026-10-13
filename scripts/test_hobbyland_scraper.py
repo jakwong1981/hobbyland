@@ -161,5 +161,20 @@ class HeadlessFlagTest(HobbydigiRetryTest):
             hs.HEADLESS = original
 
 
+class ExclusiveSkuTest(unittest.TestCase):
+    def test_keys_by_url_slug(self):
+        url = "https://www.hobbydigi.com/zh_hant_hk/model-kit/theme/gundam/bandai-hg-gaplant"
+        self.assertEqual(hs.hobbydigi_exclusive_sku(url), "HD:bandai-hg-gaplant")
+
+    def test_ignores_query_string_and_trailing_slash(self):
+        self.assertEqual(hs.hobbydigi_exclusive_sku("https://h/x/slug/?a=1"), "HD:slug")
+
+    def test_empty_url_yields_no_key(self):
+        self.assertEqual(hs.hobbydigi_exclusive_sku(""), "")
+
+    def test_key_is_never_a_thirteen_digit_jan(self):
+        self.assertNotRegex(hs.hobbydigi_exclusive_sku("https://h/x/slug"), r"^4\d{12}$")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

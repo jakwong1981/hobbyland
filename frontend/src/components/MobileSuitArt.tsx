@@ -6,17 +6,46 @@
 function FederationHead() {
   return (
     <svg className="ms-art ms-art-federation" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
-      <path className="ms-vfin" d="M100 92 L38 22 L52 20 L100 74 L148 20 L162 22 Z" />
-      <path className="ms-vfin-glint" d="M100 92 L38 22 L52 20 L100 74 L148 20 L162 22 Z" />
-      <circle className="ms-crest-gem" cx="100" cy="80" r="6" />
-      <path className="ms-helmet" d="M58 96 Q60 64 100 60 Q140 64 142 96 L146 136 L126 150 L74 150 L54 136 Z" />
-      <path className="ms-face" d="M76 104 L124 104 L118 128 L82 128 Z" />
-      <path className="ms-eye ms-eye-left" d="M78 108 L96 112 L94 118 L80 115 Z" />
-      <path className="ms-eye ms-eye-right" d="M122 108 L104 112 L106 118 L120 115 Z" />
-      <path className="ms-mouthplate" d="M84 130 L116 130 L112 140 L88 140 Z" />
-      <path className="ms-chin" d="M92 141 L108 141 L104 150 L96 150 Z" />
-      <path className="ms-vent" d="M64 120 L72 120 L72 138 L64 134 Z M136 120 L128 120 L128 138 L136 134 Z" />
-      <path className="ms-collar" d="M44 152 L156 152 L170 176 L30 176 Z" />
+      <defs>
+        <linearGradient id="ms-fed-helmet" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#aebfd6" />
+          <stop offset="0.3" stopColor="#ffffff" />
+          <stop offset="0.7" stopColor="#f1f5fb" />
+          <stop offset="1" stopColor="#9fb2cb" />
+        </linearGradient>
+        <linearGradient id="ms-fed-fin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#fff3a0" />
+          <stop offset="1" stopColor="#e3a800" />
+        </linearGradient>
+        <linearGradient id="ms-fed-chin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#f2545c" />
+          <stop offset="1" stopColor="#b3202a" />
+        </linearGradient>
+        <linearGradient id="ms-fed-collar" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#4aa0ff" />
+          <stop offset="1" stopColor="#1c58b8" />
+        </linearGradient>
+      </defs>
+      <path className="ms-vfin" d="M97 76 L40 14 L50 12 L99 54 Z M103 76 L160 14 L150 12 L101 54 Z" />
+      <path className="ms-vfin-core" d="M100 46 L108 62 L103 78 L97 78 L92 62 Z" />
+      <path className="ms-vfin-glint" d="M97 76 L40 14 L50 12 L99 54 Z M103 76 L160 14 L150 12 L101 54 Z" />
+      <path className="ms-collar" d="M42 156 L158 156 L172 182 L28 182 Z" />
+      <path className="ms-detail" d="M62 158 L58 180 M138 158 L142 180 M100 158 L100 180" />
+      <path className="ms-helmet" d="M56 100 Q54 64 100 58 Q146 64 144 100 L148 132 L128 152 L72 152 L52 132 Z" />
+      <path className="ms-ear" d="M50 98 L40 104 L42 134 L54 138 Z M150 98 L160 104 L158 134 L146 138 Z" />
+      <path className="ms-detail" d="M80 66 L84 90 M120 66 L116 90 M100 60 L100 74" />
+      <path className="ms-crest" d="M93 72 L107 72 L104 88 L96 88 Z" />
+      <circle className="ms-vulcan" cx="78" cy="74" r="3.5" />
+      <circle className="ms-vulcan" cx="122" cy="74" r="3.5" />
+      <path className="ms-brow" d="M66 92 L134 92 L130 100 L70 100 Z" />
+      <path className="ms-face" d="M72 100 L128 100 L122 132 L78 132 Z" />
+      <path className="ms-eye ms-eye-left" d="M76 104 L97 108 L95 116 L79 113 Z" />
+      <path className="ms-eye ms-eye-right" d="M124 104 L103 108 L105 116 L121 113 Z" />
+      <path className="ms-cheek" d="M64 104 L72 104 L78 132 L66 128 Z M136 104 L128 104 L122 132 L134 128 Z" />
+      <path className="ms-mouthplate" d="M82 128 L118 128 L113 142 L87 142 Z" />
+      <path className="ms-detail" d="M91 130 L92 141 M96 130 L96 141 M100 130 L100 141 M104 130 L104 141 M109 130 L108 141" />
+      <path className="ms-chin" d="M88 142 L112 142 L106 154 L94 154 Z" />
+      <path className="ms-hl" d="M70 80 Q74 68 92 64" />
     </svg>
   );
 }
@@ -24,14 +53,33 @@ function FederationHead() {
 function ZeonHead() {
   return (
     <svg className="ms-art ms-art-zeon" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
-      <path className="ms-horn" d="M100 34 L108 70 L92 70 Z" />
-      <path className="ms-helmet" d="M50 112 Q50 58 100 54 Q150 58 150 112 L144 140 L56 140 Z" />
-      <rect className="ms-rail" x="62" y="96" width="76" height="18" rx="9" />
-      <circle className="ms-monoeye" cx="100" cy="105" r="7" />
-      <path className="ms-mouth" d="M78 124 L122 124 L116 156 L84 156 Z" />
-      <path className="ms-pipe ms-pipe-left" d="M80 136 Q52 150 48 178" />
-      <path className="ms-pipe ms-pipe-right" d="M120 136 Q148 150 152 178" />
-      <path className="ms-collar" d="M40 160 L160 160 L172 182 L28 182 Z" />
+      <defs>
+        <linearGradient id="ms-zeon-helmet" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#3f6a26" />
+          <stop offset="0.35" stopColor="#8cc063" />
+          <stop offset="0.75" stopColor="#5f9140" />
+          <stop offset="1" stopColor="#365a22" />
+        </linearGradient>
+        <radialGradient id="ms-zeon-eye" cx="0.4" cy="0.4" r="0.7">
+          <stop offset="0" stopColor="#ffd0e0" />
+          <stop offset="0.45" stopColor="#ff3d7f" />
+          <stop offset="1" stopColor="#8a0f3c" />
+        </radialGradient>
+      </defs>
+      <path className="ms-pipe ms-pipe-left" d="M82 140 Q46 150 40 184" />
+      <path className="ms-pipe ms-pipe-right" d="M118 140 Q154 150 160 184" />
+      <path className="ms-collar" d="M36 164 L164 164 L176 186 L24 186 Z" />
+      <path className="ms-horn" d="M100 28 L106 60 L94 60 Z" />
+      <path className="ms-helmet" d="M46 118 Q42 56 100 50 Q158 56 154 118 L146 148 L54 148 Z" />
+      <path className="ms-detail" d="M62 66 Q100 54 138 66 M100 52 L100 90 M54 110 L66 144 M146 110 L134 144" />
+      <path className="ms-cheek" d="M46 118 L62 126 L66 148 L54 148 Z M154 118 L138 126 L134 148 L146 148 Z" />
+      <path className="ms-visor" d="M58 92 L142 92 L146 118 L54 118 Z" />
+      <rect className="ms-rail" x="64" y="98" width="72" height="14" rx="7" />
+      <circle className="ms-monoeye" cx="100" cy="105" r="8" />
+      <circle className="ms-eye-glint" cx="97" cy="102" r="2" />
+      <path className="ms-mouth" d="M74 126 L126 126 L118 158 L82 158 Z" />
+      <path className="ms-grille" d="M86 130 L88 156 M93 130 L94 156 M100 130 L100 156 M107 130 L106 156 M114 130 L112 156" />
+      <path className="ms-hl" d="M60 84 Q70 62 94 56" />
     </svg>
   );
 }

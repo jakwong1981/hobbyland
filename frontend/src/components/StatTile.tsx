@@ -6,9 +6,10 @@ interface Props {
   label: ReactNode;
   value: number;
   tone: string;
+  note?: ReactNode;
 }
 
-export function StatTile({ label, value, tone }: Props) {
+export function StatTile({ label, value, tone, note }: Props) {
   const shown = useCountUp(value);
   return (
     <div className={`stat-tile ${tone}`}>
@@ -16,6 +17,7 @@ export function StatTile({ label, value, tone }: Props) {
         {shown}
       </span>
       <span className="stat-label">{label}</span>
+      {note !== undefined && <span className="stat-note">{note}</span>}
     </div>
   );
 }

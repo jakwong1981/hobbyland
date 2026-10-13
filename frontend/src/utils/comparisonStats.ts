@@ -6,6 +6,7 @@ export interface ComparisonSummary {
   cheapestByShop: Record<ShopCode, number>;
   ties: number;
   exclusives: number;
+  exclusivesByShop: Record<ShopCode, number>;
 }
 
 function emptyShopCounts(): Record<ShopCode, number> {
@@ -15,12 +16,14 @@ function emptyShopCounts(): Record<ShopCode, number> {
 // Exclusive SKUs are counted apart from "cheapest": being the only seller is not a price win.
 export function summarizeComparisons(rows: ComparisonRow[]): ComparisonSummary {
   const cheapestByShop = emptyShopCounts();
+  const exclusivesByShop = emptyShopCounts();
   let ties = 0;
   let exclusives = 0;
 
   for (const row of rows) {
     if (row.exclusiveShop !== null) {
       exclusives += 1;
+      exclusivesByShop[row.exclusiveShop] += 1;
     } else if (row.cheapestShop === 'tie') {
       ties += 1;
     } else if (row.cheapestShop !== null) {
@@ -28,5 +31,5 @@ export function summarizeComparisons(rows: ComparisonRow[]): ComparisonSummary {
     }
   }
 
-  return { total: rows.length, cheapestByShop, ties, exclusives };
+  return { total: rows.length, cheapestByShop, ties, exclusives, exclusivesByShop };
 }

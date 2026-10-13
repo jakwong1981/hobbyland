@@ -89,6 +89,12 @@ export class ProductRepository {
       );
   }
 
+  deleteProvisionalByUrl(shopId: number, grade: Grade, url: string): void {
+    this.db
+      .prepare("DELETE FROM products WHERE shop_id = ? AND grade = ? AND url = ? AND sku LIKE 'HD:%'")
+      .run(shopId, grade, url);
+  }
+
   findProducts(filters: { shop?: ShopCode; grade?: Grade; q?: string }): ProductRow[] {
     const conditions: string[] = [];
     const params: string[] = [];

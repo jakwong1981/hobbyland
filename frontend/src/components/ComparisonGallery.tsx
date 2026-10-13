@@ -6,6 +6,7 @@ import { CheaperBadge } from './CheaperBadge';
 import { GradeEmblem } from './GradeEmblem';
 import { ProductImage } from './ProductImage';
 import { ShopLogo } from './ShopLogo';
+import { skuLabel } from '../utils/skuLabel';
 
 const STAGGER_CAP = 20;
 
@@ -39,7 +40,7 @@ const GalleryCard = memo(function GalleryCard({ row, index }: { row: ComparisonR
       </div>
       <div className="gallery-body">
         <h3 className="product-title">{row.title}</h3>
-        <span className="sku">{row.sku}</span>
+        <span className="sku">{skuLabel(row.sku)}</span>
         <ul className="gallery-offers">
           {SHOP_CODES.map((shop) => (
             <OfferLine key={shop} row={row} shop={shop} />

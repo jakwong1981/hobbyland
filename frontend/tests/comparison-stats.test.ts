@@ -23,6 +23,7 @@ describe('summarizeComparisons', () => {
       cheapestByShop: { hobbyland: 2, 'animes-pro': 1, hobbydigi: 0 },
       ties: 1,
       exclusives: 1,
+      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 1 },
     });
   });
 
@@ -32,6 +33,7 @@ describe('summarizeComparisons', () => {
       cheapestByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0 },
       ties: 0,
       exclusives: 0,
+      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0 },
     });
   });
 });

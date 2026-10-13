@@ -181,4 +181,27 @@ describe('buildFreshness', () => {
 
     expect(freshness.overall).toBe('2026-10-09T09:00:00.000Z');
   });
+
+  it('replaces a provisional HD: row by URL once the kit gets a real JAN', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const url = 'https://www.hobbydigi.com/p/gaplant';
+    const provisional = parseProductCsv(`${HEADER}\nKit,100,${url},,HD:gaplant,,\n`).records;
+    importProducts(repo, 'hobbydigi', 'hg', 'hobbydigi_hg.csv', provisional, 0);
+
+    const linked = parseProductCsv(`${HEADER}\nKit,100,${url},,4573102663849,,\n`).records;
+    importProducts(repo, 'hobbydigi', 'hg', 'hobbydigi_hg.csv', linked, 0);
+
+    const skus = repo.findProducts({ shop: 'hobbydigi' }).map((product) => product.sku);
+    expect(skus).toEqual(['4573102663849']);
+  });
+
+  it('keeps a provisional HD: row when re-imported unchanged', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const records = parseProductCsv(`${HEADER}\nKit,100,https://x/p,,HD:p,,\n`).records;
+
+    importProducts(repo, 'hobbydigi', 'hg', 'a.csv', records, 0);
+    importProducts(repo, 'hobbydigi', 'hg', 'a.csv', records, 0);
+
+    expect(repo.findProducts({ shop: 'hobbydigi' })).toHaveLength(1);
+  });
 });

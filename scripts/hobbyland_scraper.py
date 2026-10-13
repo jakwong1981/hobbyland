@@ -105,6 +105,7 @@ ANIME_PRO_CATEGORIES = {
 # proved unreliable — so the grade comes from deepseek_resolve and the stem
 # becomes hobbydigi_<grade>.csv.
 HOBBYDIGI_SHOP_CODE = "hobbydigi"
+HOBBYDIGI_EXCLUSIVE_PREFIX = "HD:"
 HOBBYDIGI_CATEGORIES = {
     "hd": (HOBBYDIGI_SHOP_CODE, "/zh_hant_hk/model-kit/theme/gundam"),
 }
@@ -156,14 +157,29 @@ HOBBYDIGI_MATCHES_FILENAME = "hobbydigi_matches.json"
 DATABASE_FILENAME = "hobbyland.db"
 
 
-def _catalogue_path():
-    """Locate the application database, or None when it does not exist yet."""
+def _search_dirs():
+    """Working directory first, then the repo's data/ folder."""
     repo_data = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-    for directory in (os.getcwd(), repo_data):
+    return (os.getcwd(), repo_data)
+
+
+def _catalogue_path():
+    """Locate the application database, or None when it does not exist yet."""
+    for directory in _search_dirs():
         candidate = os.path.join(directory, DATABASE_FILENAME)
         if os.path.isfile(candidate):
             return candidate
+    return None
+
+
+def _load_cached_cards():
+    """Cards from the last successful HobbyDigi crawl, or None if never crawled."""
+    for directory in _search_dirs():
+        candidate = os.path.join(directory, HOBBYDIGI_CARDS_FILENAME)
+        if os.path.isfile(candidate):
+            with open(candidate, encoding="utf-8") as f:
+                return json.load(f)
     return None
 
 
@@ -551,6 +567,17 @@ def hobbydigi_sell_type(title):
     return ""
 
 
+def hobbydigi_exclusive_sku(url):
+    """Provisional key for a kit no other shop was matched to: HD:<url slug>.
+
+    It is not a 13-digit JAN, so it can never join another shop's row, and it
+    stays stable for as long as the product URL does. The importer replaces it
+    by URL once a real JAN is found.
+    """
+    slug = (url or "").split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+    return f"{HOBBYDIGI_EXCLUSIVE_PREFIX}{slug}" if slug else ""
+
+
 def hobbydigi_row(card, sku):
     """One HobbyDigi listing card -> the same columns as a Hobbyland CSV row."""
     title = (card.get("title") or "").strip()
@@ -583,6 +610,9 @@ def _hobbydigi_page(page, url, budget_s):
     mistaken for a bot block.
     """
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    if not HEADLESS and _hobbydigi_challenged(page):
+        input("   👤 Tick the Cloudflare check in the browser window, "
+              "wait for the listing to appear, then press Enter here... ")
     for _ in range(HD_CHALLENGE_RETRIES):
         try:
             page.wait_for_selector("li.product-item", timeout=budget_s * 1000)
@@ -765,7 +795,8 @@ def _print_hobbydigi_report(stats):
     print(f"      JAN human-confirmed: {stats['confirmed_jan']}")
     print(f"      JAN by model code  : {stats['catalogue_jan']}")
     print(f"      variants quashed   : {stats['ambiguous']}  (one barcode, two kits)")
-    print(f"      awaiting review    : {stats['no_jan']}  (no JAN — run review_matches.py)")
+    print(f"      stored HobbyDigi-only: {stats.get('exclusive', 0)}  "
+          f"(no JAN — keyed HD:<slug>; run review_matches.py to link them)")
     print(f"      grade out of scope : {stats['no_grade']}  (PG/SD/EG/1:100/other)")
     print("      written per grade  : " + "  ".join(
         f"{grade.upper()}={stats['grades'][grade]}"
@@ -775,10 +806,10 @@ def _print_hobbydigi_report(stats):
 def scrape_hobbydigi(listing_path):
     """Crawl one HobbyDigi listing and bucket rows by resolved grade.
 
-    Returns `(buckets, stats)` where `buckets` maps grade -> rows. A kit with no
-    trustworthy JAN, or one whose grade is not hg/mg/rg, is dropped: the importer
-    skips a row without a `sku` anyway, and a guessed JAN would silently create a
-    false cross-shop match.
+    Returns `(buckets, stats)` where `buckets` maps grade -> rows. A kit whose
+    grade is not hg/mg/rg is dropped. A kit with no trustworthy JAN is kept under
+    a provisional `HD:<slug>` key rather than a guessed JAN, which would silently
+    create a false cross-shop match; it shows as HobbyDigi-only.
     """
     api_key = deepseek_resolve.load_api_key()
     db_path = _catalogue_path()
@@ -804,12 +835,12 @@ def scrape_hobbydigi(listing_path):
         while page_num <= HD_MAX_PAGES:
             try:
                 batch = _hobbydigi_page_isolated(p, f"{base}?p={page_num}")
-            except RuntimeError:
-                if not cards:
+            except RuntimeError as exc:
+                cards = _load_cached_cards()
+                if cards is None:
                     raise
-                # A partial catalogue still beats none: keep what we collected.
-                print(f"   ⚠️  page {page_num} blocked by Cloudflare — keeping "
-                      f"the {len(cards)} cards already collected")
+                print(f"   ⚠️  page {page_num} blocked by Cloudflare ({exc}) — "
+                      f"using {len(cards)} cached cards")
                 blocked = True
                 break
             if not batch:
@@ -835,16 +866,24 @@ def scrape_hobbydigi(listing_path):
     if not cards:
         return {}, {}
 
-    _save_json(HOBBYDIGI_CARDS_FILENAME, cards)
-    print(f"   💾 {len(cards)} raw cards → {HOBBYDIGI_CARDS_FILENAME}")
+    if not blocked:
+        _save_json(HOBBYDIGI_CARDS_FILENAME, cards)
+        print(f"   💾 {len(cards)} raw cards → {HOBBYDIGI_CARDS_FILENAME}")
 
     resolved, stats = _resolve_hobbydigi(cards, api_key, catalogue, matches)
     stats["blocked_pages"] = blocked
 
     buckets = {grade: [] for grade in deepseek_resolve.GRADES}
+    stats["exclusive"] = 0
     for card, item in zip(cards, resolved):
-        if item["grade"] is not None and item["sku"]:
-            buckets[item["grade"]].append(hobbydigi_row(card, item["sku"]))
+        if item["grade"] is None:
+            continue
+        sku = item["sku"]
+        if not sku:
+            sku = hobbydigi_exclusive_sku(item["url"])
+            stats["exclusive"] += bool(sku)
+        if sku:
+            buckets[item["grade"]].append(hobbydigi_row(card, sku))
 
     return buckets, stats
 

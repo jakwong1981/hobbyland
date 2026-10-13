@@ -13,6 +13,7 @@ import { useComparisonSort } from '../hooks/useComparisonSort';
 import { CheaperBadge } from './CheaperBadge';
 import { ProductImage } from './ProductImage';
 import { ShopLogo } from './ShopLogo';
+import { skuLabel } from '../utils/skuLabel';
 
 const STAGGER_CAP = 20;
 
@@ -86,7 +87,7 @@ function TitleCell({ row }: { row: ComparisonRow }) {
         <ProductImage row={row} className="table-thumb" />
         <div className="product-info">
           <span className="product-title">{row.title}</span>
-          <span className="sku">{row.sku}</span>
+          <span className="sku">{skuLabel(row.sku)}</span>
         </div>
       </div>
     </td>

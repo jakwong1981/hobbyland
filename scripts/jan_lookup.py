@@ -30,6 +30,8 @@ _NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_IDENTIFIER_NOISE_RE = re.compile(r"Y\d{3,5}|\(?BAN\d{5,7}\)?|4\d{12}", re.IGNORECASE)
+
 # Grade families. Matched loosely because the shops disagree on sub-line labels
 # (HGUC / HGIBO / HGBF / HGGS / HG00 all mean "hg"). The lookarounds test letters
 # only, so a grade glued to a malformed scale token — the real "1/1HG" that
@@ -56,6 +58,8 @@ _EMPTY_BRACKET_RE = re.compile(r"[\[【（(]\s*[\]】）)]")
 CODE_WEIGHT = 0.62
 CJK_WEIGHT = 0.55
 DEFAULT_THRESHOLD = 0.72
+# Reported score for an exact core-name match; below CODE+CJK but above threshold.
+SAME_NAME_SCORE = 0.8
 
 
 def normalize_title(title):
@@ -72,14 +76,52 @@ def normalize_title(title):
 
 
 def model_codes(title):
-    """Uppercased mech/model designations found in a title."""
-    return {m.group(0).upper() for m in _CODE_RE.finditer(title or "")}
+    """Uppercased mech/model designations found in a title.
+
+    Prices (Y2200), BAN item numbers and JANs are stripped first: two unrelated
+    kits sharing a price once scored as a shared model code.
+    """
+    text = _IDENTIFIER_NOISE_RE.sub(" ", title or "")
+    return {m.group(0).upper() for m in _CODE_RE.finditer(text)}
 
 
 def cjk_bigrams(title):
     """CJK character bigrams — the unit that survives word-order differences."""
     chars = _CJK_RE.findall(title or "")
     return {chars[i] + chars[i + 1] for i in range(len(chars) - 1)}
+
+
+# Series titles sit in 《》/【】 in one place or another on every shop, or are
+# omitted altogether, so they cannot take part in an exact-name comparison.
+_SERIES_RE = re.compile(r"[《【][^》】]*[》】]")
+_PUNCT_RE = re.compile(r"[\s\-_·・:：,，.。/／\[\]()（）]+")
+_HYPHENATED_CODE_RE = re.compile(r"\b[A-Za-z]+(?:-[A-Za-z0-9]+)+\b")
+_SUBLINE_RE = re.compile(r"(?<![A-Za-z])(MGSD|MGEX|HGUC|HGBF|HGIBO|HGCE|HGGS|HG00|HG|MG|RG)(?![A-Za-z])",
+                         re.IGNORECASE)
+
+
+def core_name(title):
+    """The kit's own name: no shop noise, grade, scale, series or model code.
+
+    Anything that distinguishes two otherwise identically named kits — Ver.2.0,
+    Ver.Ka, 彩色透明版, 限定, 改 — is deliberately left in, so a variant never
+    collapses onto its base kit.
+    """
+    text = _SERIES_RE.sub(" ", normalize_title(title))
+    text = _HYPHENATED_CODE_RE.sub(
+        lambda m: "" if re.search(r"\d", m.group(0)) else m.group(0), text)
+    return _PUNCT_RE.sub("", text)
+
+
+def _subline(title):
+    found = _SUBLINE_RE.search(title or "")
+    return found.group(1).upper() if found else ""
+
+
+def _compatible_sublines(query, candidate):
+    """MGSD and MG (or HGUC vs HG) share a grade bucket but are different kits."""
+    left, right = _subline(query), _subline(candidate)
+    return not (("MGSD" in (left, right) or "MGEX" in (left, right)) and left != right)
 
 
 def _dice(left, right):
@@ -142,6 +184,32 @@ class JanCatalogue:
         if not candidates:
             return "", 0.0, None
 
+        candidates = [(sku, candidate) for sku, candidate in candidates
+                      if _compatible_sublines(title, candidate)]
+        fuzzy = self._fuzzy(candidates, title, threshold)
+        return fuzzy if fuzzy[0] else self._same_name(candidates, title)
+
+    def _same_name(self, candidates, title):
+        """Fallback: identical core name, exactly one SKU behind it.
+
+        Catches the many kits whose only difference between shops is word order,
+        a model code on one side, or the series label — which dilute the fuzzy
+        score below threshold even though the names are the same.
+        """
+        name = core_name(title)
+        if len(name) < 3:
+            return "", 0.0, None
+        hits = {sku: candidate for sku, candidate in candidates
+                if core_name(candidate) == name}
+        if len(hits) != 1:
+            return "", 0.0, None
+        sku, candidate = next(iter(hits.items()))
+        return sku, SAME_NAME_SCORE, candidate
+
+    def _fuzzy(self, candidates, title, threshold):
+        """`(sku, score, title)`, or `('', 0.0, None)` when nothing qualifies."""
+        if not candidates:
+            return "", 0.0, None
         scored = sorted(((score(title, candidate), sku, candidate)
                          for sku, candidate in candidates), reverse=True)
         best_score, best_sku, best_title = scored[0]

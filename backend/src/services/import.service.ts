@@ -62,10 +62,19 @@ export function importProducts(
   repo.runInTransaction(() => {
     batchId = repo.createBatch(sourceFile, shop, grade, records.length, skipped);
     for (const record of records) {
+      if (!isProvisionalSku(record.sku) && record.url) {
+        repo.deleteProvisionalByUrl(shopId, grade, record.url);
+      }
       repo.upsertProduct(shopId, grade, record, batchId);
     }
   });
   return { batchId, rowCount: records.length, skipped };
+}
+
+const PROVISIONAL_SKU_PREFIX = 'HD:';
+
+export function isProvisionalSku(sku: string): boolean {
+  return sku.startsWith(PROVISIONAL_SKU_PREFIX);
 }
 
 export function buildFreshness(rows: ShopImportTimestamp[], grade: Grade | null): ImportFreshness {

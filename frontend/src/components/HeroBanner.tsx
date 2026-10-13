@@ -37,6 +37,7 @@ export function HeroBanner({ rows, grade }: Props) {
               key={shop}
               value={summary.cheapestByShop[shop]}
               tone={`stat-shop ${SHOP_TONE[shop]}`}
+              note={`獨家 ${summary.exclusivesByShop[shop]}`}
               label={
                 <>
                   <ShopLogo shop={shop} />
@@ -46,7 +47,7 @@ export function HeroBanner({ rows, grade }: Props) {
               }
             />
           ))}
-          <StatTile label="單一網店獨家" value={summary.exclusives} tone="stat-exclusive" />
+          <StatTile label="獨家合計" value={summary.exclusives} tone="stat-exclusive" />
         </div>
       </div>
     </section>

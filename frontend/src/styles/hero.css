@@ -73,8 +73,15 @@ html[data-faction="zeon"] .ms-art-federation {
 
 /* Federation head */
 .ms-art-federation .ms-vfin {
-  fill: #f5c518;
-  stroke: #fff2b0;
+  fill: url(#ms-fed-fin);
+  stroke: #8a6500;
+  stroke-width: 1.5;
+}
+
+.ms-art-federation .ms-vfin-core {
+  fill: url(#ms-fed-chin);
+  stroke: #6d0f17;
+  stroke-width: 1.5;
 }
 
 .ms-art-federation .ms-vfin-glint {
@@ -91,13 +98,45 @@ html[data-faction="zeon"] .ms-art-federation {
 }
 
 .ms-art-federation .ms-helmet {
-  fill: #eef3fa;
-  stroke: #9bb3cf;
+  fill: url(#ms-fed-helmet);
+  stroke: #5d7390;
+  stroke-width: 1.5;
+}
+
+.ms-art-federation .ms-ear {
+  fill: #7f93ad;
+  stroke: #46586f;
+  stroke-width: 1.5;
+}
+
+.ms-art-federation .ms-crest {
+  fill: #e8414a;
+  stroke: #7a1018;
+  stroke-width: 1.5;
+}
+
+.ms-art-federation .ms-vulcan {
+  fill: #3b4a5f;
+  stroke: #1a2433;
+  stroke-width: 1.5;
+}
+
+.ms-art-federation .ms-brow {
+  fill: #2f8cf0;
+  stroke: #123c78;
+  stroke-width: 1.5;
+}
+
+.ms-art-federation .ms-cheek {
+  fill: #f5c518;
+  stroke: #8a6500;
+  stroke-width: 1.2;
 }
 
 .ms-art-federation .ms-face {
-  fill: #1c2a3d;
-  stroke: #9bb3cf;
+  fill: #151f2e;
+  stroke: #46586f;
+  stroke-width: 1.5;
 }
 
 .ms-art-federation .ms-eye {
@@ -113,8 +152,9 @@ html[data-faction="zeon"] .ms-art-federation {
 }
 
 .ms-art-federation .ms-chin {
-  fill: #e8414a;
-  stroke: #ffb3b6;
+  fill: url(#ms-fed-chin);
+  stroke: #6d0f17;
+  stroke-width: 1.5;
 }
 
 .ms-art-federation .ms-vent {
@@ -123,19 +163,57 @@ html[data-faction="zeon"] .ms-art-federation {
 }
 
 .ms-art-federation .ms-collar {
-  fill: #2f8cf0;
-  stroke: #9bccff;
+  fill: url(#ms-fed-collar);
+  stroke: #0f3a80;
+  stroke-width: 1.5;
+}
+
+.ms-art .ms-detail {
+  fill: none;
+  stroke: rgba(20, 30, 45, 0.55);
+  stroke-width: 1.2;
+}
+
+.ms-art .ms-hl {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 3;
+  stroke-linecap: round;
 }
 
 /* Zeon head */
 .ms-art-zeon .ms-horn {
   fill: #d4ae3e;
-  stroke: #f6dc8a;
+  stroke: #7a5f12;
 }
 
 .ms-art-zeon .ms-helmet {
-  fill: #6a9a43;
-  stroke: #a6cf7d;
+  fill: url(#ms-zeon-helmet);
+  stroke: #243a16;
+  stroke-width: 1.5;
+}
+
+.ms-art-zeon .ms-cheek {
+  fill: #4b6d30;
+  stroke: #243a16;
+  stroke-width: 1.5;
+}
+
+.ms-art-zeon .ms-visor {
+  fill: #2a3320;
+  stroke: #141a0f;
+  stroke-width: 1.5;
+}
+
+.ms-art-zeon .ms-eye-glint {
+  fill: #fff;
+  stroke: none;
+}
+
+.ms-art-zeon .ms-grille {
+  fill: none;
+  stroke: #1d2b13;
+  stroke-width: 2;
 }
 
 .ms-art-zeon .ms-rail {
@@ -144,8 +222,9 @@ html[data-faction="zeon"] .ms-art-federation {
 }
 
 .ms-art-zeon .ms-monoeye {
-  fill: #ff3d7f;
-  stroke: #ffc1d5;
+  fill: url(#ms-zeon-eye);
+  stroke: #5a0a28;
+  stroke-width: 1.5;
   filter: drop-shadow(0 0 8px #ff3d7f);
 }
 
@@ -162,8 +241,8 @@ html[data-faction="zeon"] .ms-art-federation {
 }
 
 .ms-art-zeon .ms-collar {
-  fill: #e0402f;
-  stroke: #ff8472;
+  fill: #c9382a;
+  stroke: #5e130c;
 }
 
 /* ---------- copy ---------- */
@@ -280,6 +359,12 @@ html[data-faction="zeon"] .faction-copy-zeon {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   color: var(--text-muted);
+}
+
+.stat-note {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--warning);
 }
 
 .stat-label .shop-logo {

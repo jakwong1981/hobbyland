@@ -249,5 +249,41 @@ class QuashCollisionsTest(unittest.TestCase):
         self.assertEqual(self.scraper._quash_collisions(resolved), 0)
 
 
+class SameNameFallbackTest(unittest.TestCase):
+    JAN = "4573102571625"
+    OTHER_JAN = "4573102571632"
+
+    def _catalogue(self, *rows):
+        return jl.JanCatalogue([("hg", sku, title) for sku, title in rows])
+
+    def test_same_name_matches_despite_series_label_and_model_code(self):
+        catalogue = self._catalogue(
+            (self.JAN, "BANDAI - HG 1/144 RMS-106 高渣古 (地球聯邦配色) Y1200 (4573102571625)"))
+        found = catalogue.lookup("Bandai HG 組裝模型 - 1/144 高渣古 (地球聯邦配色)", "hg")
+        self.assertEqual(found[0], self.JAN)
+
+    def test_variant_suffix_does_not_collapse_onto_base_kit(self):
+        catalogue = self._catalogue(
+            (self.JAN, "Bandai - HG 1/144 突擊自由高達 Y2200 (4573102571625)"))
+        found = catalogue.lookup("Bandai HG 組裝模型 - 1/144 突擊自由高達 (Revive)", "hg")
+        self.assertEqual(found[0], "")
+
+    def test_two_skus_behind_one_name_abstain(self):
+        catalogue = self._catalogue(
+            (self.JAN, "Bandai - HG 1/144 神高達 Y2000 (4573102571625)"),
+            (self.OTHER_JAN, "[現貨] HG 1/144【機動武鬥傳G高達】神高達"))
+        self.assertEqual(catalogue.lookup("Bandai HG 組裝模型 - 1/144 神高達", "hg")[0], "")
+
+    def test_mgsd_never_matches_a_plain_mg_kit(self):
+        catalogue = jl.JanCatalogue([
+            ("mg", self.JAN, "Bandai - MG 1/100 ZGMF-X42S 命運高達 Y4800 (4573102571625)")])
+        self.assertEqual(
+            catalogue.lookup("Bandai MGSD 組裝模型 - 命運高達《機動戰士高達SEED DESTINY》", "mg")[0], "")
+
+    def test_shared_price_is_not_a_shared_model_code(self):
+        codes = jl.model_codes("Bandai - HGUC 1/144 高達F91 Y1400 (BAN579553)")
+        self.assertNotIn("Y1400", codes)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
