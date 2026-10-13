@@ -3,11 +3,13 @@
 
 ## 1. Business Flow
 
-1. Scheduled cron job runs `scripts/hobbyland_scraper.py`, producing up to 9 CSVs
-   (`hobbyland_{hg,mg,rg}.csv`, `animes-pro_{hg,mg,rg}.csv`, `hobbydigi_{hg,mg,rg}.csv`) with header
+1. Scheduled cron job runs `scripts/hobbyland_scraper.py`, producing up to 12 CSVs
+   (`hobbyland_{hg,mg,rg}.csv`, `animes-pro_{hg,mg,rg}.csv`, `hobbydigi_{hg,mg,rg}.csv`,
+   `fookle_{hg,mg,rg}.csv`) with header
    `title,price,url,regular_price,sku,stock,sell_type,image_url` (UTF-8 BOM). Older CSVs without
    `image_url` still import — the field is `NULL` on insert and left untouched on re-import.
-   HobbyDigi writes only the grades it actually resolved, so a run may produce fewer than 9.
+   HobbyDigi and Fookle write only the grades they actually resolved, so a run may produce fewer
+   than 12.
 2. Import (CLI `pnpm import:csv` or dashboard upload) parses CSV, validates rows, and upserts
    products keyed by `(shop_id, sku, grade)` inside a single transaction per file; each file
    produces one `import_batches` record.
@@ -37,7 +39,8 @@
 - Two or more offers, one uniquely lowest → `cheapestShop` = that shop, `saving` = the gap to the
   **runner-up** (rounded to 2 dp), `exclusiveShop = null`. Badge:「<Shop> 最平」. `saving` stays in the
   API but is not rendered: the verdict names the winner only. With two shops the runner-up is the only
-  rival; with three it is the next-best alternative, which is the number a buyer actually cares about.
+  rival; with three or four it is the next-best alternative, which is the number a buyer actually
+  cares about.
 - More than one offer at the lowest price → `cheapestShop = 'tie'`, `saving = 0`,
   `exclusiveShop = null`. Badge:「同價」. The test counts every offer level with the lowest price
   rather than comparing the top two, so a tie between the first and a later shop is still a tie.
@@ -46,8 +49,8 @@
   not render a price-comparison verdict: a lone offer never won anything, so「<Shop> 最平」is wrong.
   `exclusiveShop` exists so the badge reads the verdict instead of inferring it from `saving === null`.
   This is the majority case — 276 of 487 groups as of 2026-10-12.
-- A SKU carried by exactly two of three shops yields `exclusiveShop = null`; the grid already shows
-  the empty column, so there is no separate "2 of 3" field.
+- A SKU carried by exactly two of four shops yields `exclusiveShop = null`; the grid already shows
+  the empty columns, so there is no separate "2 of 4" field.
 - `title` is taken from the highest-ranked shop in `SHOP_CODES`. `findProducts` orders by `sku`
   alone, so within a group the row order is unspecified and the shops word the same kit differently
   — an explicit pick keeps the displayed title stable across runs.
@@ -96,9 +99,9 @@ Layout, top to bottom:
 5. **Content** — table (shop logos in headers, staggered row entrance, thumbnail zoom, shining 最平
    badge) or gallery cards (large photo, per-shop price list, winner highlighted).
 
-Logos: every shop has an SVG monogram chip (`HL` hexagon, `AP` circle, `HD` diamond) tinted with its
-`--shop-*` colour. Shop colour tints logos only — price text stays neutral so the faction accent
-keeps meaning "the winner".
+Logos: every shop has an SVG monogram chip (`HL` hexagon, `AP` circle, `HD` diamond, `FM` rounded
+square) tinted with its `--shop-*` colour. Shop colour tints logos only — price text stays neutral so
+the faction accent keeps meaning "the winner".
 
 Motion is confined to `styles/motion.css` inside `@media (prefers-reduced-motion: no-preference)`.
 With reduced motion: no animation or transitions, count-ups show the final value immediately, and

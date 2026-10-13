@@ -48,6 +48,34 @@ describe('GET /api/comparisons', () => {
     expect(kitB.exclusiveShop).toBe('hobbyland');
   });
 
+  it('adds fookle as a fourth offer that can win the comparison', async () => {
+    // Kit A (sku 111) already carries hobbyland + animes-pro from beforeEach;
+    // add hobbydigi and a cheaper fookle offer so all four shops compare it.
+    const hobbydigiCsv = `${HEADER}\nKit A,130,https://d.example/a,178,111,,現貨\n`;
+    const fookleCsv = `${HEADER}\nKit A,100,https://f.example/a,178,111,,現貨\nKit D,90,https://f.example/d,90,444,,現貨\n`;
+    importProducts(repo, 'hobbydigi', 'hg', 'hobbydigi_hg.csv', parseProductCsv(hobbydigiCsv).records, 0);
+    importProducts(repo, 'fookle', 'hg', 'fookle_hg.csv', parseProductCsv(fookleCsv).records, 0);
+
+    const res = await request(app).get('/api/comparisons?grade=hg');
+
+    expect(res.status).toBe(200);
+    const rows = res.body.data as Array<{
+      sku: string;
+      cheapestShop: string;
+      exclusiveShop: string | null;
+      offers: Array<{ shop: string }>;
+    }>;
+    const kitA = rows.find((r) => r.sku === '111')!;
+    expect(kitA.offers).toHaveLength(4);
+    expect(kitA.offers.map((o) => o.shop)).toContain('fookle');
+    expect(kitA.cheapestShop).toBe('fookle');
+
+    // A kit only fookle carries surfaces as a fookle exclusive.
+    const kitD = rows.find((r) => r.sku === '444')!;
+    expect(kitD.cheapestShop).toBe('fookle');
+    expect(kitD.exclusiveShop).toBe('fookle');
+  });
+
   it('filters by cheaper shop', async () => {
     const res = await request(app).get('/api/comparisons?cheaper=animes-pro');
 
@@ -128,7 +156,7 @@ describe('GET /api/imports/freshness', () => {
     expect(res.body.data).toEqual({
       grade: 'mg',
       overall: null,
-      byShop: { hobbyland: null, 'animes-pro': null, hobbydigi: null },
+      byShop: { hobbyland: null, 'animes-pro': null, hobbydigi: null, fookle: null },
     });
   });
 

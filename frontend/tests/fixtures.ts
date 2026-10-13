@@ -42,6 +42,7 @@ export function buildFreshness(overrides: Partial<ImportFreshness> = {}): Import
       // key reads as undefined, which the FreshnessBar's `=== null` check would
       // render as a <time> with no dateTime.
       hobbydigi: null,
+      fookle: null,
     },
     ...overrides,
   };

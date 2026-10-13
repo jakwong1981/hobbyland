@@ -9,6 +9,7 @@ export const SHOP_LABEL: Record<ShopCode, string> = {
   'hobbyland': 'Hobbyland',
   'animes-pro': 'Animes-Pro',
   'hobbydigi': 'HobbyDigi',
+  'fookle': 'Fookle Model',
 };
 
 // Compact form for the verdict badge, whose column is the narrowest on the page.
@@ -16,6 +17,7 @@ export const SHOP_SHORT_LABEL: Record<ShopCode, string> = {
   'hobbyland': 'Hobbyland',
   'animes-pro': 'Animes',
   'hobbydigi': 'HobbyDigi',
+  'fookle': 'Fookle',
 };
 
 // Tone classes drive each shop's logo colour (see --shop-* tokens in styles/tokens.css).
@@ -24,10 +26,12 @@ export const SHOP_TONE: Record<ShopCode, string> = {
   'hobbyland': 'shop-a',
   'animes-pro': 'shop-b',
   'hobbydigi': 'shop-c',
+  'fookle': 'shop-d',
 };
 
 export const SHOP_MONOGRAM: Record<ShopCode, string> = {
   'hobbyland': 'HL',
   'animes-pro': 'AP',
   'hobbydigi': 'HD',
+  'fookle': 'FM',
 };

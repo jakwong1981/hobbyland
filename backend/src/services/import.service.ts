@@ -71,10 +71,15 @@ export function importProducts(
   return { batchId, rowCount: records.length, skipped };
 }
 
-const PROVISIONAL_SKU_PREFIX = 'HD:';
+// Provisional SKUs stand in for a JAN a shop could not supply: hobbydigi uses
+// `HD:<slug>`, fookle `FM:<slug>`. Neither is a 13-digit barcode, so when a
+// later import resolves the kit to a real JAN the provisional row for the same
+// URL is deleted (see deleteProvisionalByUrl) instead of lingering as a
+// duplicate that would surface as a false shop-exclusive.
+const PROVISIONAL_SKU_PREFIXES = ['HD:', 'FM:'] as const;
 
 export function isProvisionalSku(sku: string): boolean {
-  return sku.startsWith(PROVISIONAL_SKU_PREFIX);
+  return PROVISIONAL_SKU_PREFIXES.some((prefix) => sku.startsWith(prefix));
 }
 
 export function buildFreshness(rows: ShopImportTimestamp[], grade: Grade | null): ImportFreshness {

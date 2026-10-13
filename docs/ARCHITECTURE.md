@@ -145,7 +145,7 @@ erDiagram
     import_batches ||--o{ products : "imported in"
     shops {
         int id PK
-        text code UK "hobbyland | animes-pro"
+        text code UK "hobbyland | animes-pro | hobbydigi | fookle"
         text name
     }
     import_batches {
@@ -183,7 +183,7 @@ comparison query.
 flowchart LR
     subgraph Host
         CRON[cron job] --> SCR[hobbyland_scraper.py]
-        SCR --> CSV[(9 CSV files)]
+        SCR --> CSV[(up to 12 CSV files)]
         CSV --> CLI[pnpm import:csv]
         subgraph Docker container :8080
             BE[Express backend<br/>node:24-slim] --> DB[(SQLite /data volume)]

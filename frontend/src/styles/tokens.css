@@ -16,6 +16,7 @@
   --shop-a: #4dd0e1;
   --shop-b: #b388ff;
   --shop-c: #69f0ae;
+  --shop-d: #ffd54f;
 
   --grade-hg: #3fb6ff;
   --grade-mg: #f5a623;
@@ -97,6 +98,10 @@ html[data-faction="zeon"] {
 
 .shop-c {
   --shop: var(--shop-c);
+}
+
+.shop-d {
+  --shop: var(--shop-d);
 }
 
 [data-grade="hg"] {

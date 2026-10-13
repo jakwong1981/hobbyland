@@ -131,6 +131,7 @@ describe('buildFreshness', () => {
         hobbyland: '2026-10-11T09:00:00.000Z',
         'animes-pro': '2026-10-11T11:00:00.000Z',
         hobbydigi: null,
+        fookle: null,
       },
     });
   });
@@ -162,7 +163,7 @@ describe('buildFreshness', () => {
     const freshness = buildFreshness([], 'mg');
 
     expect(freshness.overall).toBeNull();
-    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null, hobbydigi: null });
+    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null, hobbydigi: null, fookle: null });
   });
 
   it('counts a shop the union does not know about towards overall', () => {
@@ -192,6 +193,19 @@ describe('buildFreshness', () => {
     importProducts(repo, 'hobbydigi', 'hg', 'hobbydigi_hg.csv', linked, 0);
 
     const skus = repo.findProducts({ shop: 'hobbydigi' }).map((product) => product.sku);
+    expect(skus).toEqual(['4573102663849']);
+  });
+
+  it('replaces a provisional FM: row by URL once the kit gets a real JAN', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const url = 'https://fooklemodel.com/product/astaroth';
+    const provisional = parseProductCsv(`${HEADER}\nKit,100,${url},,FM:astaroth,,\n`).records;
+    importProducts(repo, 'fookle', 'hg', 'fookle_hg.csv', provisional, 0);
+
+    const linked = parseProductCsv(`${HEADER}\nKit,100,${url},,4573102663849,,\n`).records;
+    importProducts(repo, 'fookle', 'hg', 'fookle_hg.csv', linked, 0);
+
+    const skus = repo.findProducts({ shop: 'fookle' }).map((product) => product.sku);
     expect(skus).toEqual(['4573102663849']);
   });
 

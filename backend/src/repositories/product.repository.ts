@@ -90,8 +90,12 @@ export class ProductRepository {
   }
 
   deleteProvisionalByUrl(shopId: number, grade: Grade, url: string): void {
+    // A provisional key is `<PREFIX>:<slug>` (HD: hobbydigi, FM: fookle) — the
+    // only sku that carries a colon, since a real JAN is 13 digits. Deleting by
+    // that marker replaces a stale provisional row for this URL whatever prefix
+    // it used, so a kit that later resolves a JAN leaves no duplicate behind.
     this.db
-      .prepare("DELETE FROM products WHERE shop_id = ? AND grade = ? AND url = ? AND sku LIKE 'HD:%'")
+      .prepare("DELETE FROM products WHERE shop_id = ? AND grade = ? AND url = ? AND sku LIKE '%:%'")
       .run(shopId, grade, url);
   }
 

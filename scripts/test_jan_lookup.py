@@ -81,12 +81,15 @@ class ScoreTest(unittest.TestCase):
                         jl.DEFAULT_THRESHOLD)
 
     def test_identical_titles_score_maximum(self):
+        """HL_TITLE carries a model code, CJK and a Latin word (Repair II), so an
+        identical pair agrees on all three signals and scores their full sum."""
         self.assertAlmostEqual(jl.score(HL_TITLE, HL_TITLE),
-                               jl.CODE_WEIGHT + jl.CJK_WEIGHT)
+                               jl.CODE_WEIGHT + jl.CJK_WEIGHT + jl.LATIN_WEIGHT)
 
     def test_cjk_overlap_alone_cannot_reach_the_threshold(self):
-        """At DEFAULT_THRESHOLD a match must share a model code: CJK contributes
-        at most CJK_WEIGHT, which is below the bar on its own."""
+        """CJK contributes at most CJK_WEIGHT, which is below the bar on its own,
+        so a prose-only pair with no shared model code and no shared Latin word
+        still abstains."""
         self.assertLess(jl.CJK_WEIGHT, jl.DEFAULT_THRESHOLD)
         prose_only = jl.score(HL_NO_CODE, AP_NO_CODE)
         self.assertLess(prose_only, jl.DEFAULT_THRESHOLD)
@@ -138,10 +141,10 @@ class EvaluateOnRealDataTest(unittest.TestCase):
     def setUpClass(cls):
         if not os.path.isfile(DB_PATH):
             raise unittest.SkipTest(f"no database at {DB_PATH}")
-        # HobbyDigi excluded: its JANs are produced by this matcher, so scoring
-        # the matcher on pairs it created would be circular.
+        # HobbyDigi and Fookle excluded: their JANs are produced by this matcher,
+        # so scoring the matcher on pairs it created would be circular.
         cls.catalogue = jl.JanCatalogue.from_database(DB_PATH,
-                                                     exclude_shops=("hobbydigi",))
+                                                     exclude_shops=("hobbydigi", "fookle"))
         cls.result = jl.evaluate(cls.catalogue)
 
     def test_catalogue_loaded(self):
@@ -283,6 +286,61 @@ class SameNameFallbackTest(unittest.TestCase):
     def test_shared_price_is_not_a_shared_model_code(self):
         codes = jl.model_codes("Bandai - HGUC 1/144 高達F91 Y1400 (BAN579553)")
         self.assertNotIn("Y1400", codes)
+
+
+class LatinMatchTest(unittest.TestCase):
+    """Cross-script matching for a shop that titles kits in English.
+
+    fooklemodel publishes no JAN and words a kit as e.g.
+    "Bandai #19 HG Gundam Astaroth 1/144 59155" — no mech code, no CJK — so the
+    Latin word term is the only signal that can tie it to the Chinese catalogue.
+    """
+
+    ASTAROTH_JAN = "4573102600001"
+    BARBATOS_JAN = "4573102600002"
+    LUPUS_JAN = "4573102600003"
+
+    def test_tokens_keep_distinguishing_words_and_drop_boilerplate(self):
+        tokens = jl.latin_tokens("Bandai #19 HG Gundam Astaroth 1/144 59155")
+        self.assertEqual(tokens, {"astaroth"})
+
+    def test_tokens_drop_mech_codes(self):
+        # ASW-G-29 is a model code, scored separately; it must not leak in here.
+        tokens = jl.latin_tokens("[現貨] HG 1/144 ASW-G-29 Gundam Astaroth")
+        self.assertEqual(tokens, {"astaroth"})
+
+    def test_tokens_empty_for_a_chinese_only_title(self):
+        self.assertEqual(jl.latin_tokens("[現貨] HG 1/144 高達維達爾"), set())
+
+    def test_english_title_matches_a_chinese_catalogue_row(self):
+        catalogue = jl.JanCatalogue([
+            ("hg", self.ASTAROTH_JAN,
+             "[現貨] HG 1/144【機動戰士Gundam 鐵血】ASW-G-29 Gundam Astaroth")])
+        found = catalogue.lookup("Bandai #19 HG Gundam Astaroth 1/144 59155", "hg")
+        self.assertEqual(found[0], self.ASTAROTH_JAN)
+        self.assertGreaterEqual(found[1], jl.DEFAULT_THRESHOLD)
+
+    def test_part_number_difference_does_not_block_the_match(self):
+        catalogue = jl.JanCatalogue([
+            ("hg", self.BARBATOS_JAN, "Bandai HG 1/144 Gundam Barbatos")])
+        found = catalogue.lookup("Bandai HG Gundam Barbatos 1/144 59591", "hg")
+        self.assertEqual(found[0], self.BARBATOS_JAN)
+
+    def test_base_name_does_not_grab_a_variant(self):
+        """A bare 'Barbatos' must not inherit a Lupus/Rex JAN: one extra word
+        drops the Latin dice below the threshold, so it abstains."""
+        catalogue = jl.JanCatalogue([
+            ("hg", self.LUPUS_JAN, "Bandai HG Gundam Barbatos Lupus"),
+            ("hg", self.BARBATOS_JAN, "Bandai HG Gundam Barbatos Rex")])
+        self.assertEqual(catalogue.lookup("Bandai HG Gundam Barbatos", "hg")[0], "")
+
+    def test_exact_variant_name_still_matches(self):
+        catalogue = jl.JanCatalogue([
+            ("hg", self.LUPUS_JAN, "Bandai HG Gundam Barbatos Lupus"),
+            ("hg", self.BARBATOS_JAN, "Bandai HG Gundam Barbatos Rex")])
+        self.assertEqual(
+            catalogue.lookup("Bandai HG Gundam Barbatos Lupus", "hg")[0],
+            self.LUPUS_JAN)
 
 
 if __name__ == "__main__":

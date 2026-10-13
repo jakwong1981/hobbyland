@@ -4,11 +4,12 @@ A self-hosted dashboard that answers one question: **for a given Bandai Gunpla k
 Hong Kong hobby shops is cheapest — and does only one of them actually stock it?**
 
 It ingests scraper output from [Hobbyland E-Shop](https://www.hobbylandeshop.com),
-[Animes-Pro](https://animes-pro.com) and [HobbyDigi](https://www.hobbydigi.com), matches listings
-across the shops by JAN barcode, and renders a per-SKU verdict.
+[Animes-Pro](https://animes-pro.com), [HobbyDigi](https://www.hobbydigi.com) and
+[Fookle Model](https://fooklemodel.com), matches listings across the shops by JAN barcode, and
+renders a per-SKU verdict.
 
 ```
-709 products · 487 comparison groups · HG 285 / MG 171 / RG 31   (as of 2026-10-12)
+1540 products · 1110 comparison groups · HG 672 / MG 337 / RG 101   (as of 2026-10-13)
 ```
 
 ---
@@ -16,8 +17,8 @@ across the shops by JAN barcode, and renders a per-SKU verdict.
 ## 1. Purpose
 
 The shops sell overlapping Bandai catalogue, but they price independently, run different
-promotions, and — critically — **carry different subsets of the catalogue**. Of the 487 matched
-`(grade, sku)` groups, 211 are sold by more than one shop; **276 are exclusive to one**.
+promotions, and — critically — **carry different subsets of the catalogue**. Of the 1110 matched
+`(grade, sku)` groups, 280 are sold by more than one shop; **830 are exclusive to one**.
 
 That distribution drives the central design constraint: a naive "cheapest shop" badge is wrong more
 often than it is right, because a lone offer cannot win a price comparison. Saying「Animes 最平」
@@ -30,6 +31,12 @@ different claim. The verdict model is therefore explicit about which situation i
 > ambiguity (re-releases, P-Bandai vs. retail, dual transliterations). So only barcodes from the
 > shop's own product URL key, a model-code match, or a human-confirmed match are imported; the rest
 > are held for review rather than guessed. See [HobbyDigi matching](#hobbydigi-matching).
+
+> **Fookle Model publishes no JAN at all.** Its `sku` is empty on every product and its titles are
+> English carrying only a Bandai part number (e.g. `Bandai #19 HG Gundam Astaroth 1/144 59155`), so a
+> barcode is inherited from the trusted catalogue by a matcher extended to score romanised kit words
+> and ignore part numbers; a kit that matches nothing is stored under a provisional `FM:<slug>` key
+> and surfaces as Fookle-only rather than guessed. See [Fookle matching](#fookle-matching).
 
 Secondary goals:
 
@@ -51,6 +58,9 @@ Secondary goals:
 | **Shop filter** | 有售舖頭 select narrows to the SKUs a given shop carries (default 全部) |
 | **Last-update readout** | Per-shop import timestamp for the grade being viewed, so a stale scrape is visible at a glance |
 | **Grade tabs + search** | HG / MG / RG switch and a title-or-SKU search, both server-side |
+| **Stat banner** | Hero strip counts the viewed grade's total SKUs, each shop's 最平 wins and 獨家 exclusives |
+| **Showcase marquee** | Auto-scrolling strip of kits that have photos, each linking to its cheapest offer |
+| **Table / gallery toggle** | The grid flips to a card gallery marking the winning shop; shop filter and search still apply |
 | **CSV import** | Upload through the「匯入」page, or bulk-import a folder via CLI |
 | **Theme** | Dark HUD cockpit skin, switchable between 聯邦 (Federation) and 自護 (Zeon) palettes; the choice persists across reloads |
 
@@ -126,12 +136,12 @@ flowchart TD
 
     DB[("SQLite — products · shops · import_batches")]
     CLI["cli/import.ts"]
-    SCRAPE["hobbyland_scraper.py — external repo"]
+    SCRAPE["scripts/hobbyland_scraper.py"]
 
     A -->|"fetch /api/*"| R
     REPO --> DB
     CLI --> SVC
-    SCRAPE -->|"9 CSV files"| CLI
+    SCRAPE -->|"up to 12 CSV files"| CLI
 ```
 
 - Controllers never see SQL; the repository never sees HTTP types.
@@ -170,10 +180,10 @@ flowchart TD
 ```
 
 `saving` therefore means *"versus the next-best alternative"*, not *"versus one specific rival"*.
-With two shops those are the same thing; with three they are not, and the runner-up reading is the
-one that answers the question a buyer actually has. `exclusiveShop` is set only when a single shop
-carries the SKU — at three shops a kit sold by exactly two yields `null`, and the grid already shows
-which column is empty, so no separate "2 of 3" field is needed.
+With two shops those are the same thing; with three or four they are not, and the runner-up reading
+is the one that answers the question a buyer actually has. `exclusiveShop` is set only when a single
+shop carries the SKU — at four shops a kit sold by exactly two yields `null`, and the grid already
+shows which column is empty, so no separate "2 of 4" field is needed.
 
 The tie test counts every offer level with the lowest price rather than comparing the top two.
 Because `offers` is sorted ascending those are equivalent today, but the count says what it means
@@ -195,7 +205,7 @@ on row insertion order.
 ### 4.3 Data model
 
 ```
-shops(id, code UNIQUE, name)                        -- seeded: hobbyland, animes-pro
+shops(id, code UNIQUE, name)                        -- seeded: hobbyland, animes-pro, hobbydigi, fookle
 import_batches(id, source_file, shop_code, grade,
                row_count, skipped_count, imported_at)
 products(id, shop_id FK, sku, grade, title, price,
@@ -246,7 +256,7 @@ A shop delisting a product does **not** delete the row; the last known price per
 | Shop filter, column sort | `DashboardPage` / `useComparisonSort` | **Client-side** — no extra round trip |
 | Faction theme | `useFaction` | `localStorage` → `<html data-faction>` |
 
-One `GET /api/comparisons?grade=&q=` response (≤ 280 rows) feeds sorting and filtering, so those
+One `GET /api/comparisons?grade=&q=` response (≤ 700 rows) feeds sorting and filtering, so those
 interactions are instant and never re-hit the network.
 
 A shop that does not carry a SKU has no price to rank, so it **always sorts last in both
@@ -267,10 +277,10 @@ Implemented as CSS custom properties scoped to `html[data-faction=…]`. An inli
 faction; `useFaction` owns it thereafter.
 
 The shops are deliberately **not** faction-coloured — they are separated by neutral value only
-(`--shop-a` bright, `--shop-b` dim, `--shop-c` between). Painting one shop red and one blue would
-imply an allegiance the data does not have; the faction is a skin, not a claim. A new shop needs a
-`--shop-*` token plus its two rules; CSS has no compiler, so omitting them fails silently rather
-than loudly.
+(`--shop-a` bright, `--shop-b` dim, `--shop-c` between, `--shop-d` a fourth distinct hue for
+Fookle). Painting one shop red and one blue would imply an allegiance the data does not have; the
+faction is a skin, not a claim. A new shop needs a `--shop-*` token plus its two rules; CSS has no
+compiler, so omitting them fails silently rather than loudly.
 
 Two CSS details that are load-bearing rather than cosmetic:
 
@@ -287,7 +297,7 @@ Two CSS details that are load-bearing rather than cosmetic:
 corepack enable
 pnpm install
 pnpm build          # type-check + build both packages
-pnpm test           # backend 34 + frontend 47
+pnpm test           # backend 38 + frontend 68
 pnpm dev            # backend :8080 (tsx watch) + frontend :5173 (vite, /api proxied)
 ```
 
@@ -310,9 +320,11 @@ flowchart LR
     SC -->|"HTTP API"| HL["Hobbyland Vue SPA backend"]
     SC -->|"Playwright + Chromium"| AP["Animes-Pro (Shopify)"]
     SC -->|"Playwright, fresh context per page"| HD["HobbyDigi (Magento + Cloudflare)"]
-    HL --> CSV[("9 CSV files")]
+    SC -->|"WooCommerce Store API"| FM["Fookle Model (WooCommerce)"]
+    HL --> CSV[("up to 12 CSV files")]
     AP --> CSV
     HD --> CSV
+    FM --> CSV
     CSV -->|"pnpm import:csv"| DB[("SQLite")]
     DB --> UI["Dashboard :8080"]
 ```
@@ -328,6 +340,10 @@ The scraper lives in this repository at `scripts/hobbyland_scraper.py` and runs 
   solves the challenge, then listing pages are walked and product cards read from the DOM
   (handling lazy-load `data-src` / `srcset`, protocol-relative `//`, and `{width}` templates).
 - **HobbyDigi** is Magento 2 behind Cloudflare. See below.
+- **Fookle Model** is a plain WooCommerce store with an open JSON Store API
+  (`/wp-json/wc/store/v1/products`), so it needs no browser and clears no bot challenge: the grade is
+  fixed by the category id (`hg`=27, `mg`=35, `rg`=32), prices are integer minor units, and it
+  publishes no JAN. See [Fookle matching](#fookle-matching).
 
 CSV contract (UTF-8 BOM):
 
@@ -358,6 +374,7 @@ Scrape-and-import in one step:
 pnpm scrape                                  # host mode, all categories
 scripts/scrape-and-import.sh rg hg           # selected categories only
 scripts/scrape-and-import.sh hd              # hobbydigi (needs DEEPSEEK_API_KEY)
+scripts/scrape-and-import.sh fm              # fooklemodel (needs data/hobbyland.db, no API key)
 scripts/scrape-and-import.sh --docker        # import into the running container
 ```
 
@@ -402,9 +419,9 @@ So the pipeline accepts a JAN only from three sources, in order of trust:
 1. **The shop's own URL key** — authoritative, ~6% of listings.
 2. **A human-confirmed match** — `scripts/review_matches.py` proposes, a person decides once, and
    the decision is cached by product URL so later runs are deterministic and free.
-3. **A model-code match** against the trusted catalogue (`jan_lookup.py`, threshold 0.72, which
-   arithmetically requires a shared mech designation — 94% recall at 100% precision on labeled
-   pairs).
+3. **A model-code or kit-name match** against the trusted catalogue (`jan_lookup.py`, threshold
+   0.72 — 94% recall at 100% precision on labeled pairs; a match needs a shared mech designation,
+   strong CJK overlap, or an identical set of distinguishing Latin words).
 
 Everything else is left for review. Two guards make the residue safe:
 
@@ -424,6 +441,49 @@ scripts/venv/bin/python scripts/review_matches.py            # review; y / 0-9 /
 DeepSeek *is* used for one thing it is genuinely good at: **grade classification**, because that is
 recognition rather than recall. It graded 519 of 784 cards into hg/mg/rg and correctly rejected
 265 PG / SD / EG / 1:100 kits. MGSD folds into `mg` by product decision.
+
+### Fookle matching
+
+Fookle Model (福利模型, `fooklemodel.com`) is the fourth shop. Its crawl is trivial and its identity
+problem is absolute — the opposite balance to HobbyDigi.
+
+**The crawl is a plain JSON API.** WooCommerce exposes an open Store API at
+`/wp-json/wc/store/v1/products?category=<id>&per_page=100&page=<n>` with no bot challenge, so the
+scraper walks it with `urllib` — no Playwright, no fresh-context budget. The category id fixes the
+grade (`hg`=27, `mg`=35, `rg`=32), so no model call classifies a kit and `fm` runs without a
+`DEEPSEEK_API_KEY` (it does need `data/hobbyland.db`, the catalogue it inherits from). Prices are
+integer **minor units**: the real value is `int(prices.price) / 10**prices.currency_minor_unit`. The
+scraper keeps in-stock Bandai kits and skips obvious decals/tools, mirroring the site's own
+`/brand/bandai/?_stockstatus=1&_productcategories=<grade>` facet, and writes `fookle_{hg,mg,rg}.csv`.
+
+**The identity is absent.** `sku` is empty on *every* product, the detail `description` is empty,
+and the names are English carrying only a Bandai part number — never a 13-digit JAN:
+
+```
+Bandai #19 HG Gundam Astaroth 1/144 59155
+```
+
+So a JAN can only be **inherited** from the trusted catalogue, exactly as HobbyDigi does — but the
+matcher scored on mech codes and CJK bigrams, neither of which an English part-number title shares
+with a Chinese catalogue row. `jan_lookup.py` was therefore extended, precision-first:
+
+- **Part-number stripping.** A bare 5-6 digit run (`59155`) is a Bandai part number, not identity —
+  one shop prints it, another does not — so `normalize_title` drops it (the lookarounds keep the
+  pattern off a 13-digit JAN).
+- **Latin-word scoring.** `score()` adds a third term: the Dice overlap of distinguishing romanised
+  words once brand/grade/scale/franchise stopwords (`bandai, gundam, hg, 1/144, …`) are removed, so
+  the words that actually identify a kit (`astaroth`, `sazabi`, `freedom`) drive the match.
+  `LATIN_WEIGHT` (0.78) sits just above the 0.72 threshold: an identical word set clears it, one
+  extra or missing word (0.8 dice) does not.
+
+The `evaluate()` harness over the labeled database pairs still reports **0 wrong-SKU matches at 100%
+precision** with the Latin term enabled, so the enhancement adds cross-script recall without costing
+precision. Resolution order is the shop `sku`, a JAN in the name, a JAN in the URL, then the
+catalogue; a kit that matches nothing is stored under a provisional **`FM:<slug>`** key (never a
+guessed barcode) and surfaces as「只有 Fookle 有貨」. As with HobbyDigi, Fookle's own derived rows are
+excluded from the catalogue (`exclude_shops=('fookle', 'hobbydigi')`) so a wrong answer cannot
+confirm itself on the next run, and the backend treats an `FM:` key as provisional — a later import
+that resolves the kit to a real JAN replaces it by URL instead of leaving a duplicate.
 
 ---
 
@@ -457,7 +517,7 @@ All responses use one envelope:
 
 | Method | Path | Query / Body | `data` |
 |---|---|---|---|
-| `GET` | `/api/comparisons` | `grade?=hg\|mg\|rg`, `q?=text`, `cheaper?=hobbyland\|animes-pro` | `ComparisonRow[]` |
+| `GET` | `/api/comparisons` | `grade?=hg\|mg\|rg`, `q?=text`, `cheaper?=<shop code>` | `ComparisonRow[]` |
 | `GET` | `/api/products` | `shop?`, `grade?`, `q?` | `ProductRow[]` |
 | `GET` | `/api/imports/freshness` | `grade?=hg\|mg\|rg` | `ImportFreshness` |
 | `GET` | `/api/imports` | — | latest 20 `ImportBatchDto[]` |
@@ -516,7 +576,7 @@ in-container import.
 ## 10. Testing
 
 ```bash
-pnpm test        # backend 34/34 · frontend 47/47
+pnpm test        # backend 38/38 · frontend 68/68
 ```
 
 | Suite | Environment | Covers |
@@ -527,6 +587,9 @@ pnpm test        # backend 34/34 · frontend 47/47
 | `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「最平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (every shop listed, one or more missing, no history, loading, failed), tabs, search |
 | `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter (option count derived from `SHOP_CODES.length + 1`), filtered counts, filter-specific empty state |
 | `faction.test.tsx` | jsdom + RTL | Theme default, persistence across mounts, `<html data-faction>` mirroring, unknown-value fallback |
+| `comparison-stats.test.ts` | jsdom | `summarizeComparisons` (per-shop wins vs. ties vs. exclusives), `productImageUrl` fallback order, `selectShowcaseKits` (photo required, biggest saving first, cheapest-offer link, cap) |
+| `count-up.test.tsx` | jsdom + RTL | `useCountUp` — reduced-motion shortcut, zero→target tween, retarget mid-flight, cancel on unmount |
+| `layout.test.tsx` | jsdom + RTL | HeroBanner stat tiles and dual faction copy, KitShowcase marquee clones and photo-failure drop, ComparisonGallery winner mark, FactionWipe, table/gallery toggle |
 | `dashboard.test.tsx` | jsdom + RTL | API client unwrapping and `ApiError`, query-string building, refetch on grade change, the freshness request is grade-scoped and its timestamps render on the page, error surfacing |
 
 The database is a **fresh in-memory SQLite per test** — SQL runs for real rather than being mocked
@@ -563,11 +626,16 @@ frontend/
   src/
     App.tsx                       shell + page switch + theme owner
     pages/                        DashboardPage · ImportPage
-    components/                   ComparisonTable · CheaperBadge · ShopFilter · FreshnessBar ·
-                                  GradeTabs · SearchBar · FactionToggle · FactionCrest
+    components/                   ComparisonTable · ComparisonGallery · CheaperBadge ·
+                                  ShopFilter · FreshnessBar · GradeTabs · SearchBar ·
+                                  ViewToggle · HeroBanner · KitShowcase · StatTile ·
+                                  ProductImage · ShopLogo · GradeEmblem · MobileSuitArt ·
+                                  FactionToggle · FactionCrest · FactionWipe
     hooks/                        useComparisons · useComparisonSort · useFaction ·
-                                  useImportFreshness
+                                  useImportFreshness · useCountUp · usePrefersReducedMotion
     api/                          client · comparison.api · import.api
+    shops.ts                      per-shop display labels and colour tones
+    utils/                        comparisonStats · productImage · showcase · skuLabel
     types/index.ts                mirrors backend DTOs (+ frontend-only types)
     styles/                       dark mobile-suit HUD theme (tokens, layout, motion), mobile-first
   tests/
@@ -594,15 +662,15 @@ data/                             SQLite (gitignored)
 ## 13. Known limitations
 
 - **`?cheaper=` includes exclusive listings.** The filter matches on `cheapestShop`, which is also
-  set for single-shop SKUs — so `cheaper=hobbyland` on HG returns 200 rows, of which only 59 are
-  genuine price wins and 141 are "only Hobbyland stocks it". Preserved deliberately to keep the API
+  set for single-shop SKUs — so `cheaper=hobbyland` on HG returns 184 rows, of which only 88 are
+  genuine price wins and 96 are "only Hobbyland stocks it". Preserved deliberately to keep the API
   stable when `exclusiveShop` was added. No UI surface currently exposes the filter; if one ever
   does, decide first whether it should exclude `exclusiveShop != null`.
 - **Stock does not affect the verdict.** A pre-order (預訂) offer is compared at face value against
   an in-stock offer. It is flagged visually but not ranked differently.
 - **Delisted products persist.** A shop removing a listing does not delete the row, so a stale price
   can survive until the next scrape overwrites it. Full-replacement semantics are not implemented.
-- **The scraper is external.** Reproducing the pipeline end to end requires the separate
-  `hobbyland_scraper.py` plus its Python `venv` and Playwright Chromium install. Both shops'
+- **The scraper's runtime is external.** `scripts/hobbyland_scraper.py` is in this repo, but its
+  Python `venv` and Playwright Chromium install are not part of `pnpm install`. All four shops'
   selectors and endpoints can break without notice.
 - **No CI.** Tests are run locally; nothing enforces them on push.

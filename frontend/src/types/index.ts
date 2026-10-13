@@ -1,6 +1,6 @@
 // frontend/src/types/index.ts
 // Mirrors backend/src/types/index.ts by hand — there is no shared package.
-export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi'] as const;
+export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi', 'fookle'] as const;
 export type ShopCode = (typeof SHOP_CODES)[number];
 
 export const GRADES = ['hg', 'mg', 'rg'] as const;

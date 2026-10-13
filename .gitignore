@@ -15,4 +15,8 @@ pi-session-*.html
 __pycache__/
 
 # local scratch notes
-enhancement.md
+enhancement*.md
+ehancement*.md
+
+# editor settings
+.vscode/

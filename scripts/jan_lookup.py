@@ -12,8 +12,10 @@ inherits that verified JAN.
 
 Matching is deliberately precision-first. A false match produces a wrong
 cross-shop price comparison, which is worse than no comparison at all, so the
-score requires a shared model code or a strong CJK overlap and abstains
-otherwise. `evaluate()` reports precision and recall over the labeled pairs
+score requires a shared model code, a strong CJK overlap, or an identical set of
+distinguishing Latin words, and abstains otherwise. The Latin term is what lets
+a shop that titles kits in English (fooklemodel) match the Chinese catalogue.
+`evaluate()` reports precision and recall over the labeled pairs
 already present in the database: every (grade, sku) carried by two shops is a
 known match, and every other candidate with a different sku is a known non-match.
 """
@@ -47,6 +49,26 @@ _SCALE_RE = re.compile(r"\b1\s*/\s*(?:144|100|60|48|250|200)\b|#\s*\d+")
 # GN-001REII, GAT-X370, MBF-P02, MS-07B-3, ASW-G-66, XXXG-01W.
 _CODE_RE = re.compile(r"\b[A-Za-z]{1,6}[-A-Za-z0-9]*\d[-A-Za-z0-9]*\b")
 
+# A bare 5-6 digit run is a Bandai part number (59155), not identity: one shop
+# prints it in the title, another does not, so it only ever pulls an otherwise
+# identical core name apart. The lookarounds keep it off a 13-digit JAN.
+_PART_NUMBER_RE = re.compile(r"(?<!\d)\d{5,6}(?!\d)")
+
+# Romanised kit words, for shops that title in English. Two letters or more so
+# single-letter series markers (00, X) and roman numerals stay out of the noise.
+_LATIN_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+
+# Franchise/grade/brand boilerplate shared by nearly every kit. Kept out of the
+# Latin comparison so it cannot pull two unrelated kits toward each other; the
+# distinguishing words (astaroth, sazabi, barbatos) are what must overlap.
+_LATIN_STOPWORDS = frozenset({
+    "bandai", "gundam", "gunpla", "mobile", "suit",
+    "hg", "mg", "rg", "pg", "sd", "eg", "fm",
+    "hguc", "mgsd", "mgex", "hgbf", "hgibo", "hggs", "hgce",
+    "model", "models", "kit", "kits", "plastic", "scale",
+    "the", "and", "for", "with", "grade", "high", "master", "real", "perfect",
+})
+
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 # Brackets left empty once their contents were stripped as noise.
@@ -54,23 +76,30 @@ _EMPTY_BRACKET_RE = re.compile(r"[\[【（(]\s*[\]】）)]")
 
 # Scoring weights. A shared model code is near-conclusive on its own; CJK
 # overlap alone must be very strong to carry a match, because transliteration
-# differs between shops (維達爾 vs 維度爾 for the same kit).
+# differs between shops (維達爾 vs 維度爾 for the same kit). An identical set of
+# distinguishing Latin words carries a match on its own, so LATIN_WEIGHT sits
+# just above the threshold: at 1.0 dice it clears the bar, but one extra or
+# missing word (0.8 dice) does not, which keeps the Latin term precision-first.
 CODE_WEIGHT = 0.62
 CJK_WEIGHT = 0.55
+LATIN_WEIGHT = 0.78
 DEFAULT_THRESHOLD = 0.72
 # Reported score for an exact core-name match; below CODE+CJK but above threshold.
 SAME_NAME_SCORE = 0.8
 
 
 def normalize_title(title):
-    """Strip shop decoration, grade labels and scale from a title.
+    """Strip shop decoration, grade labels, scale and bare part numbers.
 
     Model codes are deliberately *kept* — they are the strongest cross-shop
-    signal and are extracted separately by `model_codes`.
+    signal and are extracted separately by `model_codes`. Bare Bandai part
+    numbers (59155) are dropped so an English title that carries one still
+    reduces to the same core name as a Chinese title that does not.
     """
     text = _NOISE_RE.sub(" ", title or "")
     text = _GRADE_RE.sub(" ", text)
     text = _SCALE_RE.sub(" ", text)
+    text = _PART_NUMBER_RE.sub(" ", text)
     text = _EMPTY_BRACKET_RE.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip().casefold()
 
@@ -89,6 +118,25 @@ def cjk_bigrams(title):
     """CJK character bigrams — the unit that survives word-order differences."""
     chars = _CJK_RE.findall(title or "")
     return {chars[i] + chars[i + 1] for i in range(len(chars) - 1)}
+
+
+def latin_tokens(title):
+    """Distinguishing romanised words in a title, for cross-script matching.
+
+    A shop such as fooklemodel titles kits in English with a bare Bandai part
+    number and no mech code — "Bandai #19 HG Gundam Astaroth 1/144 59155" —
+    which shares neither a model code nor CJK with the Chinese catalogue. After
+    stripping identifiers, mech codes, part numbers, grades and franchise
+    boilerplate, the remaining kit words (astaroth) are the only overlap left.
+    Returns an empty set for a title with no distinguishing Latin word, so a
+    Chinese-only pair scores 0 here and keeps its previous behaviour.
+    """
+    text = _IDENTIFIER_NOISE_RE.sub(" ", title or "")
+    text = _CODE_RE.sub(" ", text)
+    text = _PART_NUMBER_RE.sub(" ", text)
+    text = _GRADE_RE.sub(" ", text)
+    words = {w.casefold() for w in _LATIN_WORD_RE.findall(text)}
+    return words - _LATIN_STOPWORDS
 
 
 # Series titles sit in 《》/【】 in one place or another on every shop, or are
@@ -131,11 +179,18 @@ def _dice(left, right):
 
 
 def score(query, candidate):
-    """Similarity of two titles in [0, 1], weighted toward hard identifiers."""
+    """Similarity of two titles, weighted toward hard identifiers.
+
+    Sums a shared mech/model code, CJK bigram overlap and Latin word overlap.
+    The total can exceed 1.0 when a pair agrees on more than one signal, which
+    only ever strengthens a real match; the threshold comparison is unaffected.
+    """
     codes = model_codes(query) & model_codes(candidate)
     code_part = 1.0 if codes else 0.0
     cjk_part = _dice(cjk_bigrams(query), cjk_bigrams(candidate))
-    return CODE_WEIGHT * code_part + CJK_WEIGHT * cjk_part
+    latin_part = _dice(latin_tokens(query), latin_tokens(candidate))
+    return (CODE_WEIGHT * code_part + CJK_WEIGHT * cjk_part
+            + LATIN_WEIGHT * latin_part)
 
 
 class JanCatalogue:

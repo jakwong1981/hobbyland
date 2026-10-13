@@ -48,6 +48,17 @@ create a false cross-shop match — an unresolvable kit is skipped at import
 instead. MGSD counts as ``mg``; PG / SD / EG and anything else is dropped.
 Set ``DEEPSEEK_API_KEY`` before scraping the ``hd`` category.
 
+For fooklemodel.com (福利模型, a plain WooCommerce store) the public Store API
+serves the same JSON the browser renders, with no bot challenge, so — unlike
+hobbydigi — fookle needs no browser. Grade needs no model either: the hg/mg/rg
+facet the shop links to is a real product category, so its id *is* the grade.
+What fookle never publishes is the JAN — ``sku`` is empty on every product and
+the title carries only a Bandai part number (59155) — so, exactly as for
+hobbydigi, a kit inherits its JAN from the trusted catalogue (``jan_lookup``)
+and an unresolved kit is stored under a provisional ``FM:<slug>`` key rather
+than a guessed barcode. No ``DEEPSEEK_API_KEY`` is needed for ``fm``, but
+``hobbyland.db`` must exist so there is a catalogue to inherit from.
+
 Each category is written to its own CSV:
   hg    -> hobbyland_hg.csv   (model_area > gundam_zone > hg_high_grade)
   mg    -> hobbyland_mg.csv   (model_area > gundam_zone > mg_master_grade)
@@ -56,15 +67,18 @@ Each category is written to its own CSV:
   ap_mg -> animes-pro_mg.csv
   ap_rg -> animes-pro_rg.csv
   hd    -> hobbydigi_{hg,mg,rg}.csv  (one crawl, bucketed by resolved grade)
+  fm    -> fookle_{hg,mg,rg}.csv  (WooCommerce Store API, Bandai hg/mg/rg)
 
 Usage:
   python3 hobbyland_scraper.py                 # scrape all categories
   python3 hobbyland_scraper.py hg rg           # scrape selected categories only
   python3 hobbyland_scraper.py ap_hg ap_mg ap_rg
   python3 hobbyland_scraper.py hd              # hobbydigi, needs DEEPSEEK_API_KEY
+  python3 hobbyland_scraper.py fm              # fooklemodel, needs hobbyland.db
 """
 
 import csv
+import html
 import json
 import os
 import re
@@ -109,6 +123,28 @@ HOBBYDIGI_EXCLUSIVE_PREFIX = "HD:"
 HOBBYDIGI_CATEGORIES = {
     "hd": (HOBBYDIGI_SHOP_CODE, "/zh_hant_hk/model-kit/theme/gundam"),
 }
+
+# fooklemodel.com (福利模型) — a plain WooCommerce store. Its public Store API
+# (/wp-json/wc/store/v1/products) serves JSON with no bot challenge, so fookle
+# uses urllib like hobbyland, not a browser. The hg/mg/rg facet the enhancement
+# links to is a real product category, so the category id fixes the grade —
+# discovered once from /products/categories (hg=27, mg=35, rg=32).
+FOOKLE_BASE_URL = "https://fooklemodel.com"
+FOOKLE_STORE_API = FOOKLE_BASE_URL + "/wp-json/wc/store/v1/products"
+FOOKLE_SHOP_CODE = "fookle"
+FOOKLE_EXCLUSIVE_PREFIX = "FM:"
+FOOKLE_BRAND_SLUG = "bandai"
+# grade -> WooCommerce product-category id.
+FOOKLE_GRADE_CATEGORY_IDS = {"hg": 27, "mg": 35, "rg": 32}
+# CLI key -> (shop code, {grade: category id}); one key crawls all three grades.
+FOOKLE_CATEGORIES = {"fm": (FOOKLE_SHOP_CODE, FOOKLE_GRADE_CATEGORY_IDS)}
+FOOKLE_PER_PAGE = 100      # Store API maximum page size
+FOOKLE_MAX_PAGES = 40      # safety guard; the real total is discovered at runtime
+
+# Bandai decals, water-slide transfers and tools share the HG/MG/RG categories
+# but are not model kits; skipping them keeps the comparison about kits. An
+# unmatched accessory would otherwise just clutter the dashboard as Fookle-only.
+FOOKLE_SKIP_RE = re.compile(r"水貼|水贴|貼紙|贴纸|decal|工具|tool", re.IGNORECASE)
 
 # 13-digit JAN in a product name, e.g. Y2700(4573102663849). Same identity
 # column as hobbyland_*.csv `sku`.
@@ -888,6 +924,225 @@ def scrape_hobbydigi(listing_path):
     return buckets, stats
 
 
+def fookle_price(prices, key):
+    """WooCommerce money in minor units -> a plain decimal string.
+
+    The Store API returns prices as integers scaled by 10**currency_minor_unit
+    (minor_unit=1 here, so "600" is $60.0). The backend parses a price with a
+    bare Number(), so hand it an unformatted value, never a thousands separator.
+    """
+    prices = prices or {}
+    raw = prices.get(key)
+    if raw in (None, ""):
+        return ""
+    try:
+        value = int(raw) / (10 ** int(prices.get("currency_minor_unit", 0)))
+    except (TypeError, ValueError):
+        return ""
+    return f"{value:.2f}"
+
+
+def fookle_sell_type(product):
+    """Fookle stock/pre-order wording -> the 現貨/預訂 vocabulary the UI expects.
+
+    A pre-order can still report is_in_stock (it is on backorder), so the tag and
+    the leading 預訂 wording are checked before the in-stock fallback.
+    """
+    name = html.unescape(product.get("name") or "")
+    tags = {t.get("slug") for t in product.get("tags", [])}
+    if "pre-order" in tags or re.match(r"\s*(預訂|預購|訂貨)", name):
+        return "預訂"
+    if product.get("is_in_stock"):
+        return "現貨"
+    return ""
+
+
+def fookle_exclusive_sku(permalink):
+    """Provisional key for a kit no other shop matched to: FM:<url slug>.
+
+    Mirrors hobbydigi_exclusive_sku — not a 13-digit JAN, so it can never join
+    another shop's row, and stable for as long as the product URL is.
+    """
+    path = urllib.parse.urlparse(permalink or "").path
+    slug = urllib.parse.unquote(path.rstrip("/").rsplit("/", 1)[-1])
+    return f"{FOOKLE_EXCLUSIVE_PREFIX}{slug}" if slug else ""
+
+
+def fookle_row(product, sku):
+    """One Store API product -> the same columns as a Hobbyland CSV row."""
+    images = product.get("images") or []
+    first = images[0] if images else {}
+    prices = product.get("prices") or {}
+    return {
+        "title": html.unescape(product.get("name") or "").strip(),
+        "price": fookle_price(prices, "price"),
+        "url": product.get("permalink") or "",
+        "regular_price": fookle_price(prices, "regular_price"),
+        "sku": sku,
+        "stock": "",
+        "sell_type": fookle_sell_type(product),
+        "image_url": first.get("thumbnail") or first.get("src") or "",
+    }
+
+
+def _is_fookle_kit(product):
+    """In-stock, Bandai-brand, and not an obvious decal/tool accessory.
+
+    The brand + stock filters reproduce the site's own
+    /brand/bandai/?_stockstatus=1&_productcategories=<grade> facet.
+    """
+    if not product.get("is_in_stock"):
+        return False
+    brands = {b.get("slug") for b in product.get("brands", [])}
+    if FOOKLE_BRAND_SLUG not in brands:
+        return False
+    name = html.unescape(product.get("name") or "")
+    return not FOOKLE_SKIP_RE.search(name)
+
+
+def _fetch_fookle_page(category_id, page):
+    """GET one Store API page of a category; returns the parsed product list."""
+    query = urllib.parse.urlencode({
+        "category": category_id,
+        "per_page": FOOKLE_PER_PAGE,
+        "page": page,
+    })
+    request = urllib.request.Request(
+        f"{FOOKLE_STORE_API}?{query}",
+        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, list):
+        raise RuntimeError(
+            f"unexpected Store API response: {type(payload).__name__}")
+    return payload
+
+
+def fetch_fookle_page(category_id, page):
+    """One fookle Store API page, retrying transient network/API failures."""
+    return _with_retry(lambda: _fetch_fookle_page(category_id, page),
+                       f"Page {page}")
+
+
+def scrape_fookle_grade(category_id, grade):
+    """Page one fookle category, keeping in-stock Bandai kits.
+
+    Returns the raw Store API product dicts. The category id already fixes the
+    grade, so no title classification is needed; the listing ends at the first
+    page shorter than FOOKLE_PER_PAGE (an out-of-range page returns empty).
+    """
+    products = []
+    seen_ids = set()
+    for page in range(1, FOOKLE_MAX_PAGES + 1):
+        batch = fetch_fookle_page(category_id, page)
+        kept = 0
+        for product in batch:
+            pid = product.get("id")
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            if _is_fookle_kit(product):
+                products.append(product)
+                kept += 1
+        print(f"   [{grade.upper()}] page {page}: {len(batch)} items "
+              f"(+{kept} Bandai in-stock kits)")
+        if len(batch) < FOOKLE_PER_PAGE:
+            break
+        time.sleep(PAGE_WAIT_S)
+    else:
+        print(f"   ⚠️  [{grade.upper()}] safety limit of "
+              f"{FOOKLE_MAX_PAGES} pages reached")
+    return products
+
+
+def _resolve_fookle(products, grade, catalogue):
+    """Establish a JAN for every fookle kit, in order of trust.
+
+    Same policy as hobbydigi: the JAN comes from the shop's own sku field, a JAN
+    embedded in the name or URL, or a catalogue row sharing the kit's identity —
+    never from a model, which fabricates barcodes. `sku` is '' when no source
+    produced one, so the caller stores it under a provisional FM:<slug> key.
+    """
+    resolved = []
+    for product in products:
+        name = html.unescape(product.get("name") or "")
+        url = product.get("permalink") or ""
+        sku, source = "", ""
+        for candidate, label in (
+                (deepseek_resolve.is_plausible_jan(product.get("sku"))[0], "sku"),
+                (deepseek_resolve.is_plausible_jan(jan_from_name(name))[0], "name"),
+                (deepseek_resolve.jan_from_url(url), "url")):
+            if candidate:
+                sku, source = candidate, label
+                break
+        if not sku:
+            sku = catalogue.lookup(name, grade)[0]
+            source = "catalogue" if sku else ""
+        resolved.append({"sku": sku, "grade": grade, "source": source,
+                         "title": name, "url": url})
+    ambiguous = _quash_collisions(resolved)
+    return resolved, ambiguous
+
+
+def scrape_fookle(grade_ids):
+    """Crawl fookle's Bandai hg/mg/rg categories and bucket rows by grade.
+
+    Returns `(buckets, stats)` where buckets maps grade -> CSV rows. Grade is
+    fixed by the category, so no model call is needed; the JAN is inherited from
+    the trusted catalogue (fookle publishes none), and a kit that matches
+    nothing is kept under a provisional FM:<slug> key so it shows as Fookle-only
+    rather than guessing a barcode.
+    """
+    db_path = _catalogue_path()
+    if db_path is None:
+        raise RuntimeError(
+            f"{DATABASE_FILENAME} not found — import at least one CSV first, so "
+            f"there is a trusted catalogue to inherit JANs from")
+    # Fookle's and HobbyDigi's own rows are excluded: their JANs are derived by
+    # this matcher, so including them would let a wrong answer confirm itself.
+    catalogue = jan_lookup.JanCatalogue.from_database(
+        db_path, exclude_shops=(FOOKLE_SHOP_CODE, HOBBYDIGI_SHOP_CODE))
+    print(f"   📚 {len(catalogue.entries)} trusted JANs from {db_path}")
+
+    buckets = {grade: [] for grade in deepseek_resolve.GRADES}
+    stats = {"cards": 0, "sku": 0, "name": 0, "url": 0, "catalogue": 0,
+             "exclusive": 0, "ambiguous": 0}
+    for grade in deepseek_resolve.GRADES:
+        category_id = grade_ids.get(grade)
+        if category_id is None:
+            continue
+        print(f"\n   🔗 [{grade.upper()}] "
+              f"{FOOKLE_STORE_API}?category={category_id}")
+        products = scrape_fookle_grade(category_id, grade)
+        stats["cards"] += len(products)
+        resolved, ambiguous = _resolve_fookle(products, grade, catalogue)
+        stats["ambiguous"] += ambiguous
+        for product, item in zip(products, resolved):
+            sku = item["sku"]
+            if sku:
+                stats[item["source"]] += 1
+            else:
+                sku = fookle_exclusive_sku(item["url"])
+                stats["exclusive"] += bool(sku)
+            if sku:
+                buckets[grade].append(fookle_row(product, sku))
+    return buckets, stats
+
+
+def _print_fookle_report(stats):
+    """Print the fookle resolution report — how each kit got its JAN."""
+    print(f"\n   📊 {stats['cards']} Bandai in-stock kits")
+    print(f"      JAN from shop sku  : {stats['sku']}")
+    print(f"      JAN in name        : {stats['name']}")
+    print(f"      JAN in URL         : {stats['url']}")
+    print(f"      JAN by catalogue   : {stats['catalogue']}")
+    print(f"      variants quashed   : {stats['ambiguous']}  "
+          f"(one barcode, two kits)")
+    print(f"      stored Fookle-only : {stats['exclusive']}  "
+          f"(no JAN — keyed FM:<slug>)")
+
+
 def _print_preview(products, limit=3):
     """First few saved rows, as a sanity check that the scrape looks sane."""
     for product in products[:limit]:
@@ -899,11 +1154,12 @@ def _print_preview(products, limit=3):
 
 def main(argv):
     print("=" * 70)
-    print("  HOBBYLAND / ANIMES-PRO / HOBBYDIGI — GUNPLA CATALOG SCRAPER")
+    print("  HOBBYLAND / ANIMES-PRO / HOBBYDIGI / FOOKLE — GUNPLA CATALOG SCRAPER")
     print("=" * 70 + "\n")
 
     # Merge every category dict for CLI lookup
-    all_cats = {**CATEGORIES, **ANIME_PRO_CATEGORIES, **HOBBYDIGI_CATEGORIES}
+    all_cats = {**CATEGORIES, **ANIME_PRO_CATEGORIES, **HOBBYDIGI_CATEGORIES,
+                **FOOKLE_CATEGORIES}
 
     # Optional argv selects categories; default = all
     keys = [arg.lower() for arg in argv]
@@ -918,6 +1174,35 @@ def main(argv):
     exit_code = 0
     for key in keys:
         label = key.upper()
+
+        if key in FOOKLE_CATEGORIES:
+            # --- fooklemodel.com (WooCommerce Store API) branch ---
+            shop_code, grade_ids = FOOKLE_CATEGORIES[key]
+            print(f"🔗 [{label}] Store API: {FOOKLE_STORE_API} "
+                  f"(brand={FOOKLE_BRAND_SLUG}, in stock)\n")
+            try:
+                buckets, stats = scrape_fookle(grade_ids)
+            except Exception as exc:
+                print(f"\n❌ [{label}] Scraping failed: {exc}\n")
+                exit_code = 1
+                continue
+            _print_fookle_report(stats)
+            if not any(buckets.values()):
+                print(f"\n❌ [{label}] No products resolved — no CSV written.\n")
+                exit_code = 1
+                continue
+            for grade in deepseek_resolve.GRADES:
+                rows = buckets.get(grade) or []
+                if not rows:
+                    print(f"   ⚠️  [{label}] no {grade.upper()} kits — "
+                          f"{shop_code}_{grade}.csv not written")
+                    continue
+                csv_name = save_csv(rows, f"{shop_code}_{grade}.csv")
+                print(f"\n✅ [{label}] Saved {len(rows)} {grade.upper()} "
+                      f"products → {csv_name}\n")
+                _print_preview(rows)
+            print()
+            continue
 
         if key in HOBBYDIGI_CATEGORIES:
             # --- HobbyDigi.com (Magento + Cloudflare + DeepSeek) branch ---

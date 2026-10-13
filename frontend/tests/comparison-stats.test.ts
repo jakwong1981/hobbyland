@@ -20,21 +20,35 @@ describe('summarizeComparisons', () => {
 
     expect(summary).toEqual({
       total: 6,
-      cheapestByShop: { hobbyland: 2, 'animes-pro': 1, hobbydigi: 0 },
+      cheapestByShop: { hobbyland: 2, 'animes-pro': 1, hobbydigi: 0, fookle: 0 },
       ties: 1,
       exclusives: 1,
-      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 1 },
+      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 1, fookle: 0 },
     });
   });
 
   it('returns zeroes for no rows', () => {
     expect(summarizeComparisons([])).toEqual({
       total: 0,
-      cheapestByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0 },
+      cheapestByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0, fookle: 0 },
       ties: 0,
       exclusives: 0,
-      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0 },
+      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0, fookle: 0 },
     });
+  });
+
+  it('counts a fookle price win and a fookle exclusive toward fookle', () => {
+    const rows = [
+      buildRow({ sku: 'f1', cheapestShop: 'fookle' }),
+      buildRow({ sku: 'f2', cheapestShop: 'fookle', exclusiveShop: 'fookle' }),
+    ];
+
+    const summary = summarizeComparisons(rows);
+
+    // The exclusive row is counted apart from the price win, not as a second win.
+    expect(summary.cheapestByShop.fookle).toBe(1);
+    expect(summary.exclusivesByShop.fookle).toBe(1);
+    expect(summary.exclusives).toBe(1);
   });
 });
 
