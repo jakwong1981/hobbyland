@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DashboardPage } from '../src/pages/DashboardPage';
 import { ApiError, apiGet } from '../src/api/client';
 import { fetchComparisons } from '../src/api/comparison.api';
-import { buildFreshness, buildRow, stubApi } from './fixtures';
+import { buildFreshness, buildOffer, buildRow, stubApi } from './fixtures';
 
 function jsonResponse(status: number, message: string, data: unknown): Response {
   return new Response(
@@ -57,6 +57,37 @@ describe('DashboardPage', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/comparisons?grade=hg');
   });
 
+  it('omits HobbyDigi offers and HobbyDigi-only skus', async () => {
+    stubApi([
+      buildRow({
+        sku: '1',
+        offers: [
+          buildOffer({ shop: 'hobbydigi', price: 70 }),
+          buildOffer({ shop: 'hobbyland', price: 78 }),
+          buildOffer({ shop: 'animes-pro', price: 100 }),
+        ],
+        cheapestShop: 'hobbydigi',
+        saving: 8,
+      }),
+      buildRow({
+        sku: 'HD:some-kit',
+        title: 'HD Only Kit',
+        offers: [buildOffer({ shop: 'hobbydigi', price: 90 })],
+        cheapestShop: 'hobbydigi',
+        saving: null,
+        exclusiveShop: 'hobbydigi',
+      }),
+    ]);
+    renderDashboard();
+
+    expect(await screen.findByText('HG Gundam')).toBeInTheDocument();
+    expect(screen.queryByText('HD Only Kit')).not.toBeInTheDocument();
+    expect(screen.queryByText('HobbyDigi')).not.toBeInTheDocument();
+    // The HobbyDigi column is gone and the verdict is re-derived: Hobbyland now wins.
+    expect(screen.getByText('Hobbyland 最平')).toBeInTheDocument();
+    expect(screen.getByText('1 個 SKU')).toBeInTheDocument();
+  });
+
   it('refetches when the grade tab changes', async () => {
     const fetchMock = stubApi([]);
     renderDashboard();
@@ -85,6 +116,7 @@ describe('DashboardPage', () => {
           'animes-pro': '2026-10-11T11:47:00.000Z',
           hobbydigi: null,
           fookle: null,
+          twinnermodel: null,
         },
       }),
     );

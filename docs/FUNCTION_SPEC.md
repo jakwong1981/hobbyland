@@ -3,24 +3,38 @@
 
 ## 1. Business Flow
 
-1. Scheduled cron job runs `scripts/hobbyland_scraper.py`, producing up to 12 CSVs
+1. Scheduled cron job runs `scripts/hobbyland_scraper.py`, producing up to 15 CSVs
    (`hobbyland_{hg,mg,rg}.csv`, `animes-pro_{hg,mg,rg}.csv`, `hobbydigi_{hg,mg,rg}.csv`,
-   `fookle_{hg,mg,rg}.csv`) with header
+   `fookle_{hg,mg,rg}.csv`, `twinnermodel_{hg,mg,rg}.csv`) with header
    `title,price,url,regular_price,sku,stock,sell_type,image_url` (UTF-8 BOM). Older CSVs without
    `image_url` still import — the field is `NULL` on insert and left untouched on re-import.
    HobbyDigi and Fookle write only the grades they actually resolved, so a run may produce fewer
    than 12.
-2. Import (CLI `pnpm import:csv` or dashboard upload) parses CSV, validates rows, and upserts
+2. `scripts/enrich_series.py` (run by `scrape-and-import.sh` between scrape and import; skip with
+   `--skip-series`) adds a `series` column to those CSVs: every distinct product title is
+   classified into one of the 24 Gundam series ids defined in `scripts/jev_series.py` (including
+   `unknown` for non-Gundam kits), via the Jev Decisions API with the same auto→DeepSeek fallback.
+   Results persist in `data/series_cache.json` keyed by title, so only new titles bill API calls.
+   Classification never fails the pipeline: an unreachable/expired key leaves `series` empty, and
+   failures are not cached (the next run retries them). Empty imports as `NULL`; a stale re-import
+   without the column keeps the stored value (`COALESCE`), same guard as `image_url`.
+3. Import (CLI `pnpm import:csv` or dashboard upload) parses CSV, validates rows, and upserts
    products keyed by `(shop_id, sku, grade)` inside a single transaction per file; each file
    produces one `import_batches` record.
-3. Dashboard queries `/api/comparisons`; the backend joins every shop's products, groups by
+4. Dashboard queries `/api/comparisons`; the backend joins every shop's products, groups by
    `(grade, sku)`, and computes the cheapest shop, the saving against the runner-up, and whether
    only one shop carries the SKU. The UI badges the verdict —「<Shop> 最平」,「同價」, or
-   「只有 <Shop> 有貨」.
-4. Dashboard also queries `/api/imports/freshness?grade=` and shows one last-import timestamp per
+   「只有 <Shop> 有貨」— under the product thumbnail in the table view (it is a property of the kit,
+   not a comparable field, so it does not own a column) and on the card in the gallery view. A group's `series` is the first non-null value across its shop rows —
+   shops are enriched at different times, and any classification beats none.
+5. Dashboard also queries `/api/imports/freshness?grade=` and shows one last-import timestamp per
    shop above the grid. The shops are scraped independently and drift apart, so freshness is
    reported per shop rather than as a single global number — a stale part of the comparison should
    be visible without inspecting the CSVs.
+6. Dashboard shows the series per kit (table column / gallery badge), a 系列 select that filters
+   the fetched rows client-side (options carry per-series counts; 未分類 appears only when some row
+   is unclassified), and a per-series stat chip strip computed from the visible rows
+   (`countBySeries`). Clicking a chip filters to that series; clicking the active chip clears it.
 
 ## 2. Validation Rules
 
@@ -49,8 +63,8 @@
   not render a price-comparison verdict: a lone offer never won anything, so「<Shop> 最平」is wrong.
   `exclusiveShop` exists so the badge reads the verdict instead of inferring it from `saving === null`.
   This is the majority case — 276 of 487 groups as of 2026-10-12.
-- A SKU carried by exactly two of four shops yields `exclusiveShop = null`; the grid already shows
-  the empty columns, so there is no separate "2 of 4" field.
+- A SKU carried by exactly two of five shops yields `exclusiveShop = null`; the grid already shows
+  the empty columns, so there is no separate "2 of 5" field.
 - `title` is taken from the highest-ranked shop in `SHOP_CODES`. `findProducts` orders by `sku`
   alone, so within a group the row order is unspecified and the shops word the same kit differently
   — an explicit pick keeps the displayed title stable across runs.

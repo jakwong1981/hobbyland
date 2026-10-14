@@ -21,6 +21,7 @@ interface RawCsvRow {
   stock?: string;
   sell_type?: string;
   image_url?: string;
+  series?: string;
 }
 
 export function parseProductCsv(content: string): { records: CsvProductRecord[]; skipped: number } {
@@ -72,11 +73,12 @@ export function importProducts(
 }
 
 // Provisional SKUs stand in for a JAN a shop could not supply: hobbydigi uses
-// `HD:<slug>`, fookle `FM:<slug>`. Neither is a 13-digit barcode, so when a
-// later import resolves the kit to a real JAN the provisional row for the same
-// URL is deleted (see deleteProvisionalByUrl) instead of lingering as a
-// duplicate that would surface as a false shop-exclusive.
-const PROVISIONAL_SKU_PREFIXES = ['HD:', 'FM:'] as const;
+// `HD:<slug>`, fookle `FM:<slug>`, twinnermodel `TM:<slug>`. Neither is a
+// 13-digit barcode, so when a later import resolves the kit to a real JAN the
+// provisional row for the same URL is deleted (see deleteProvisionalByUrl)
+// instead of lingering as a duplicate that would surface as a false
+// shop-exclusive.
+const PROVISIONAL_SKU_PREFIXES = ['HD:', 'FM:', 'TM:'] as const;
 
 export function isProvisionalSku(sku: string): boolean {
   return PROVISIONAL_SKU_PREFIXES.some((prefix) => sku.startsWith(prefix));
@@ -114,6 +116,7 @@ function toRecord(row: RawCsvRow): CsvProductRecord | null {
     stock: emptyToNull(row.stock),
     sellType: emptyToNull(row.sell_type),
     imageUrl: emptyToNull(row.image_url),
+    series: emptyToNull(row.series),
   };
 }
 

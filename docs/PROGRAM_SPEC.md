@@ -36,8 +36,9 @@ hobbyland/
 │   └── src/
 │       ├── main.tsx             # React root + QueryClientProvider
 │       ├── App.tsx              # shell + page switch + faction theme owner
-│       ├── types/index.ts       # mirrors backend DTOs (+ frontend-only Faction / DashboardView / ShopFilterValue / SortState)
+│       ├── types/index.ts       # mirrors backend DTOs (+ frontend-only Faction / DashboardView / ShopFilterValue / SeriesFilterValue / SortState)
 │       ├── shops.ts             # SHOP_LABEL / SHOP_SHORT_LABEL / SHOP_TONE / SHOP_MONOGRAM
+│       ├── series.ts            # SERIES_IDS / SERIES_LABEL / seriesLabel — mirrors scripts/jev_series.py SERIES
 │       ├── api/client.ts        # fetch wrapper (apiGet / apiUpload)
 │       ├── api/comparison.api.ts  api/import.api.ts
 │       ├── hooks/useComparisons.ts              # TanStack Query
@@ -48,8 +49,9 @@ hobbyland/
 │       ├── hooks/useCountUp.ts                  # rAF tween for stat numbers; instant under reduced motion
 │       ├── utils/productImage.ts                # first shop (SHOP_CODES order) with a photo
 │       ├── utils/comparisonStats.ts             # summarizeComparisons → hero stat counts
+│       ├── utils/seriesStats.ts                 # countBySeries → series filter options + stat chips
 │       ├── utils/showcase.ts                    # selectShowcaseKits → photo strip (top saving, max 16)
-│       ├── components/{GradeTabs,SearchBar,ShopFilter,ComparisonTable,CheaperBadge}.tsx
+│       ├── components/{GradeTabs,SearchBar,ShopFilter,SeriesFilter,ComparisonTable,CheaperBadge}.tsx
 │       ├── components/FreshnessBar.tsx                    # last-update readout
 │       ├── components/{FactionCrest,FactionToggle,FactionWipe}.tsx   # emblem, theme switch, switch transition
 │       ├── components/{ShopLogo,GradeEmblem,MobileSuitArt}.tsx       # inline-SVG logos & original line art
@@ -82,8 +84,8 @@ Errors are `ApiErrorResponse = { code: <httpStatus>, message, data: null, timest
 
 | Method | Path | Query / Body | Response `data` |
 |---|---|---|---|
-| GET | `/api/comparisons` | `grade?=hg|mg|rg`, `q?=text`, `cheaper?=<ShopCode>` | `ComparisonRow[]` |
-| GET | `/api/products` | `shop?`, `grade?`, `q?` | `ProductRow[]` |
+| GET | `/api/comparisons` | `grade?=hg|mg|rg`, `q?=text`, `cheaper?=<ShopCode>`, `series?=<seriesId>` | `ComparisonRow[]` |
+| GET | `/api/products` | `shop?`, `grade?`, `q?`, `series?` | `ProductRow[]` |
 | GET | `/api/imports/freshness` | `grade?=hg|mg|rg` | `ImportFreshness` |
 | GET | `/api/imports` | — | `ImportBatchDto[]` (latest 20) |
 | POST | `/api/import` | multipart: `file` (CSV), fields `shop`, `grade` | `{ batchId, rowCount, skipped }` (201) |
@@ -104,6 +106,8 @@ the SQL.
 ```ts
 ComparisonRow = {
   sku: string; grade: Grade; title: string;
+  series: string | null;               // Gundam series id (scripts/jev_series.py ids, `unknown` included);
+                                       // first non-null across the group; null when no shop row is classified
   offers: Offer[];                       // sorted by price asc, one per shop that stocks the SKU
   cheapestShop: ShopCode | 'tie' | null; // null only when there are no offers
   saving: number|null;                   // null for a single offer; else the gap to the runner-up
@@ -131,6 +135,10 @@ extra round trip is made when the user sorts or filters.
 | Grade tabs | `DashboardPage` | refetches (server-side `grade` param) |
 | Search box | `DashboardPage` | refetches (server-side `q` param) |
 | 有售舖頭 select | `DashboardPage` | filters the fetched rows to those whose `offers` include the chosen shop; default `all`. Count reads `N 個 SKU`, or `M / N 個 SKU` while filtered |
+| 系列 select | `DashboardPage` (`series`) | client-side filter on `ComparisonRow.series`; options are the series present in the fetched rows with counts (`SeriesFilter` + `countBySeries`), plus 未分類 when any row is `null`; default `all` |
+| 系列統計 chips | `DashboardPage` | one chip per series in the visible rows (`countBySeries(visible)`, count desc); clicking a chip filters to that series, clicking the active chip clears back to `all` |
+| 系列 column / badge | `ComparisonTable` / `ComparisonGallery` | `seriesLabel(row.series)` — id → 中文系列名 via `frontend/src/series.ts`; `—` when unclassified |
+| 判定 badge | `ComparisonTable` / `ComparisonGallery` | `CheaperBadge` —「<Shop> 最平」/「同價」/「只有 <Shop> 有貨」/`—`. In the table it sits **under the thumbnail inside the 產品 cell** (`.thumb-stack`), not in its own column: it is a property of the kit rather than a comparable field, and a column of one-chip cells cost more width than it carried meaning |
 | Column sort | `useComparisonSort` (inside `ComparisonTable`) | `title` and each shop's price are sortable; click cycles asc → desc. `null` sort = the backend's SKU order. A shop that does not carry the SKU has no price and always sorts last, in both directions |
 | 表格 / 圖鑑 toggle | `DashboardPage` (`view`) | swaps `ComparisonTable` ↔ `ComparisonGallery` over the same filtered rows; default `table`. Gallery keeps the incoming order (column sort is table-only) |
 | Hero stats | `HeroBanner` | `summarizeComparisons(rows)` over the fetched (unfiltered) rows: total, cheapest-wins per shop, exclusives; numbers count up via `useCountUp` |

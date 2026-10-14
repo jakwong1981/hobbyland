@@ -47,6 +47,7 @@ function toComparisonRow(group: ProductRow[]): ComparisonRow {
     sku: first.sku,
     grade: first.grade as Grade,
     title: first.title,
+    series: groupSeries(group),
     offers,
     cheapestShop,
     saving,
@@ -75,6 +76,15 @@ function representative(group: ProductRow[]): ProductRow {
 function shopRank(code: ShopCode): number {
   const index = SHOP_CODES.indexOf(code);
   return index === -1 ? SHOP_CODES.length : index;
+}
+
+// Shops are enriched at different times, so a group can mix classified and
+// unclassified rows; any classification beats none.
+function groupSeries(group: ProductRow[]): string | null {
+  for (const row of group) {
+    if (row.series !== null) return row.series;
+  }
+  return null;
 }
 
 function computeCheapest(offers: Offer[]): { cheapestShop: CheapestShop; saving: number | null } {

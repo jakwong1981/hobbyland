@@ -59,6 +59,22 @@ and an unresolved kit is stored under a provisional ``FM:<slug>`` key rather
 than a guessed barcode. No ``DEEPSEEK_API_KEY`` is needed for ``fm``, but
 ``hobbyland.db`` must exist so there is a catalogue to inherit from.
 
+For twinnermodel.com (千里達模型, Shopify) plain HTTP clients are rate-limited
+to death (every urllib request — even a single one with a browser UA — answers
+429 ``local_rate_limited``), but a real browser clears the protection without
+an interactive challenge and, once the session is warm, the shop's own
+``/collections/<handle>/products.json`` endpoint answers normally. The scraper
+therefore opens one collection page with Playwright and then pages the JSON
+endpoint from inside that page context. The JSON is strictly richer than the
+rendered cards: ``handle`` *is* the 13-digit JAN for essentially every kit,
+``vendor`` reproduces the site's ``filter.p.vendor=Bandai`` facet,
+``variants[].available`` reproduces ``filter.v.availability=1``, and prices are
+in the shop's base currency (HKD — the storefront renders TWD at the visitor's
+exchange rate), so they are directly comparable with the other shops. Grade is
+fixed by the collection (high-grade/master-grade/real-grade), and a kit whose
+handle and title carry no JAN falls back to the trusted catalogue, then to a
+provisional ``TM:<slug>`` key — the same policy as fookle.
+
 Each category is written to its own CSV:
   hg    -> hobbyland_hg.csv   (model_area > gundam_zone > hg_high_grade)
   mg    -> hobbyland_mg.csv   (model_area > gundam_zone > mg_master_grade)
@@ -68,6 +84,7 @@ Each category is written to its own CSV:
   ap_rg -> animes-pro_rg.csv
   hd    -> hobbydigi_{hg,mg,rg}.csv  (one crawl, bucketed by resolved grade)
   fm    -> fookle_{hg,mg,rg}.csv  (WooCommerce Store API, Bandai hg/mg/rg)
+  tm    -> twinnermodel_{hg,mg,rg}.csv  (Shopify products.json, Bandai hg/mg/rg)
 
 Usage:
   python3 hobbyland_scraper.py                 # scrape all categories
@@ -75,13 +92,16 @@ Usage:
   python3 hobbyland_scraper.py ap_hg ap_mg ap_rg
   python3 hobbyland_scraper.py hd              # hobbydigi, needs DEEPSEEK_API_KEY
   python3 hobbyland_scraper.py fm              # fooklemodel, needs hobbyland.db
+  python3 hobbyland_scraper.py tm              # twinnermodel, needs hobbyland.db
 """
 
 import csv
+import functools
 import html
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -141,10 +161,29 @@ FOOKLE_CATEGORIES = {"fm": (FOOKLE_SHOP_CODE, FOOKLE_GRADE_CATEGORY_IDS)}
 FOOKLE_PER_PAGE = 100      # Store API maximum page size
 FOOKLE_MAX_PAGES = 40      # safety guard; the real total is discovered at runtime
 
+# twinnermodel.com (千里達模型) — Shopify. Every plain-HTTP request answers 429
+# `local_rate_limited`, so the listing is read from inside a Playwright page
+# context that cleared the bot check first. Unlike animes-pro, no DOM parsing
+# is needed: `/collections/<handle>/products.json` serves structured JSON with
+# the JAN as the product handle, the vendor, per-variant availability and
+# base-currency (HKD) prices. Grade is fixed by the collection handle.
+TWINNER_BASE_URL = "https://twinnermodel.com"
+TWINNER_SHOP_CODE = "twinnermodel"
+TWINNER_EXCLUSIVE_PREFIX = "TM:"
+TWINNER_VENDOR = "Bandai"
+# grade -> Shopify collection handle (the enhancement's three listing URLs).
+TWINNER_GRADE_COLLECTIONS = {"hg": "high-grade", "mg": "master-grade",
+                             "rg": "real-grade"}
+# CLI key -> (shop code, {grade: collection handle}); one key crawls all grades.
+TWINNER_CATEGORIES = {"tm": (TWINNER_SHOP_CODE, TWINNER_GRADE_COLLECTIONS)}
+TWINNER_PER_PAGE = 250     # products.json maximum page size
+TWINNER_MAX_PAGES = 20     # safety guard; the real total is discovered at runtime
+
 # Bandai decals, water-slide transfers and tools share the HG/MG/RG categories
 # but are not model kits; skipping them keeps the comparison about kits. An
-# unmatched accessory would otherwise just clutter the dashboard as Fookle-only.
-FOOKLE_SKIP_RE = re.compile(r"水貼|水贴|貼紙|贴纸|decal|工具|tool", re.IGNORECASE)
+# unmatched accessory would otherwise just clutter the dashboard as a
+# single-shop exclusive.
+ACCESSORY_SKIP_RE = re.compile(r"水貼|水贴|貼紙|贴纸|decal|工具|tool", re.IGNORECASE)
 
 # 13-digit JAN in a product name, e.g. Y2700(4573102663849). Same identity
 # column as hobbyland_*.csv `sku`.
@@ -167,6 +206,16 @@ MAX_RETRY_WAIT_S = 90   # cap a hostile Retry-After value
 
 # --- Browser tuning, shared by the two bot-protected shops ---
 HEADLESS = True             # set False to watch a challenge being solved
+# hobbydigi is the one shop whose challenge cannot be passed headless. Measured
+# on the same IP and cookie jar: 24 sequential headed listing loads, zero
+# interstitials; the headless run was challenged by page 3 and never cleared,
+# because Cloudflare serves it a *passive* managed challenge whose widget
+# renders no tick box — there is nothing for a click to hit, and the JS proof
+# fails on the headless fingerprint. Headed needs a display, so a headless host
+# (Docker, CI) can force it back with HD_HEADLESS=1 and fall back to the cached
+# cards the way it does today.
+HD_HEADLESS = os.environ.get("HD_HEADLESS", "").strip().lower() not in (
+    "", "0", "false", "no")
 AP_CHALLENGE_WAIT_S = 45    # budget for Shopify's bv challenge to clear
 
 # --- hobbydigi browser tuning (Cloudflare) ---
@@ -177,15 +226,63 @@ AP_CHALLENGE_WAIT_S = 45    # budget for Shopify's bv challenge to clear
 # one browser waiting out a block it can never outlast.
 HD_BROWSER_ATTEMPTS = 3     # fresh browsers per page before giving up
 HD_BROWSER_BACKOFF_S = 8    # pause before relaunching
+# HobbyDigi needs its own, longer pause: the shared 1.5s got this IP flagged in
+# one session, after which even a headed browser was served a challenge it can
+# never pass (measured: 60s wait, zero cookies, no cf_clearance).
+HD_PAGE_WAIT_S = 6          # pause between HobbyDigi listing pages
+HD_CLEARANCE_COOKIE = "cf_clearance"
 HD_CHALLENGE_RETRIES = 2    # interstitial auto-clear checks inside one browser
 HD_CHALLENGE_WAIT_S = 20    # selector budget inside one browser
+HD_VIEWPORT = {"width": 1920, "height": 1080}
+HD_LOCALE = "zh-HK"
+
+# Cloudflare invalidates cf_clearance server-side long before the cookie's own
+# nominal expiry, so the expiry field cannot be used to judge a jar. Without an
+# age bound a dead jar is replayed into every retry browser on every run, which
+# presents as an unexplained challenge loop rather than as a stale credential.
+HD_CLEARANCE_MAX_AGE_S = 6 * 60 * 60
+
+# Persistent profile for the crawl session. Unlike a cookie-only storage_state
+# replay this also keeps the HTTP cache, IndexedDB and service workers, so a
+# returning client looks returning instead of re-fetching Cloudflare's
+# challenge orchestration cold on every launch.
+HD_PROFILE_DIRNAME = "hobbydigi_profile"
+HOBBYDIGI_COOKIE_DOMAIN = "hobbydigi.com"
+
+# --- hobbydigi Turnstile auto-tick ("ghost click") ---
+# An interactive challenge has to be ticked, and only a browser-level event is
+# accepted for it (see _hobbydigi_ghost_click). Budgets below are per browser.
+HD_TURNSTILE_HOST = "challenges.cloudflare.com"
+HD_CHECKBOX_INSET_X = 32    # widget tick box centre, from the iframe's left edge
+HD_CHECKBOX_SELECTORS = ('input[type="checkbox"]', "label.cb-lb",
+                         'div[role="checkbox"]')
+HD_CLICK_ATTEMPTS = 3       # Cloudflare re-arms the widget after a wrong tick
+HD_CLICK_SETTLE_MS = 2500   # let the widget report the tick before re-checking
+HD_CLICK_POLL_MS = 750      # wait for the widget to render before measuring it
+# Cloudflare fingerprints navigator.webdriver; without this flag Chromium sets
+# it and the tick is scored as a bot no matter how it is dispatched.
+HD_BROWSER_ARGS = ["--disable-blink-features=AutomationControlled"]
 HD_MAX_PAGES = 40           # safety guard; the real total is discovered at runtime
+
+# A branded Chrome carries the plugin list and the Client Hints that bundled
+# Chromium lacks, so it is scored as an ordinary browser rather than as an
+# automation shell. HD_BROWSER_CHANNEL=0 pins it off (Docker, CI); any other
+# value forces that channel.
+CHROME_APP_PATHS = (
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+)
+CHROME_BINARIES = ("google-chrome", "google-chrome-stable", "chrome")
 
 # Raw cards are persisted so the match-review script can propose candidates
 # without re-crawling. `review_matches.py` records every accept/reject decision
 # in the matches file, and this scraper reads the accepted ones back.
 HOBBYDIGI_CARDS_FILENAME = "hobbydigi_cards.json"
 HOBBYDIGI_MATCHES_FILENAME = "hobbydigi_matches.json"
+# A cookie jar that already cleared Cloudflare, so one human tick keeps paying
+# off for every later page and every later run (cf_clearance is bound to the IP
+# and the user agent, and expires on Cloudflare's schedule, not ours).
+HOBBYDIGI_STATE_FILENAME = "hobbydigi_state.json"
 
 # The application database holds the trusted JANs that hobbydigi rows inherit.
 # The scraper normally runs with the CSV folder as its working directory, which
@@ -246,6 +343,13 @@ def _load_matches():
     return loaded if isinstance(loaded, dict) else {}
 
 
+# Only for the shops that serve plain HTTP (hobbyland's JSON API, fookle's Store
+# API) and for the Shopify-protected animes-pro context. Deliberately NOT used
+# for hobbydigi: Playwright rewrites the User-Agent header and navigator.userAgent
+# but not the sec-ch-ua Client Hints, so a pinned string here makes one request
+# claim two different browser versions at once — a tampering signal Cloudflare
+# scores. hobbydigi reads its real UA from the engine instead
+# (_hobbydigi_real_user_agent).
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/152.0.0.0 Safari/537.36")
@@ -567,7 +671,11 @@ def _require_playwright():
 # shop's Magento 2 theme. `data-price-amount` is read instead of the rendered
 # "HK$ 2,359.90" text because the backend parses prices with a bare Number() and
 # a thousands separator would silently skip the row.
-_HOBBYDIGI_CARD_JS = """() => [...document.querySelectorAll('li.product-item')].map(li => {
+#
+# `root` is the document to search and `text` how to read a link's label: the
+# live DOM uses innerText, a DOMParser document has no layout so it must use
+# textContent. Whitespace normalisation makes the two equivalent here.
+_HOBBYDIGI_CARD_MAP_JS = """(root, text) => [...root.querySelectorAll('li.product-item')].map(li => {
   const a = li.querySelector('a.product-item-link');
   const money = sel => {
     const el = li.querySelector(sel);
@@ -583,7 +691,7 @@ _HOBBYDIGI_CARD_JS = """() => [...document.querySelectorAll('li.product-item')].
     if (imgSrc.startsWith('//')) imgSrc = 'https:' + imgSrc;
   }
   return {
-    title: a ? a.innerText.replace(/\\s+/g, ' ').trim() : '',
+    title: a ? text(a).replace(/\\s+/g, ' ').trim() : '',
     href: a ? a.href : '',
     price: money('.price-box.price-final_price [data-price-amount]')
         || money('[data-price-amount]'),
@@ -591,6 +699,23 @@ _HOBBYDIGI_CARD_JS = """() => [...document.querySelectorAll('li.product-item')].
     img: imgSrc,
   };
 })"""
+
+_HOBBYDIGI_CARD_JS = "() => (" + _HOBBYDIGI_CARD_MAP_JS + \
+    ")(document, el => el.innerText)"
+
+# Same extraction over a listing fetched in-page rather than navigated to. The
+# `<base>` element is what makes `a.href` and `img.src` absolute again: a
+# DOMParser document's baseURI is about:blank, so relative URLs would otherwise
+# come back unresolved and change the product keys.
+_HOBBYDIGI_FETCH_JS = """async ({url}) => {
+  const response = await fetch(url, {credentials: 'same-origin', redirect: 'follow'});
+  const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+  const base = doc.createElement('base');
+  base.href = url;
+  doc.head.prepend(base);
+  const cards = (""" + _HOBBYDIGI_CARD_MAP_JS + """)(doc, el => el.textContent);
+  return {status: response.status, title: doc.title || '', cards: cards};
+}"""
 
 
 def hobbydigi_sell_type(title):
@@ -629,13 +754,299 @@ def hobbydigi_row(card, sku):
     }
 
 
+def _hobbydigi_title_challenged(title):
+    """True when a document title is Cloudflare's interstitial.
+
+    Shared by the navigated page (`page.title()`) and the in-page fetch (a
+    parsed `<title>`), so the two crawl paths cannot drift on what counts as a
+    challenge. The shop serves the interstitial in zh-HK and in English.
+    """
+    text = title or ""
+    return "稍候" in text or "moment" in text.lower()
+
+
 def _hobbydigi_challenged(page):
     """True while Cloudflare is still serving its interstitial."""
     try:
         title = page.title() or ""
     except Exception:
         return True
-    return "稍候" in title or "moment" in title.lower()
+    return _hobbydigi_title_challenged(title)
+
+
+def _hobbydigi_widget_frame(page):
+    """The Turnstile child frame, or None while it has not been injected.
+
+    Cloudflare puts the widget iframe inside a shadow root, so no selector
+    query on the page can see it; the frame list is the one handle that
+    survives that encapsulation.
+    """
+    for frame in page.frames:
+        if HD_TURNSTILE_HOST in frame.url:
+            return frame
+    return None
+
+
+def _hobbydigi_checkbox_point(page):
+    """Viewport coordinates of the Turnstile tick box, or None if not rendered.
+
+    Bounding boxes are reported relative to the top-level viewport, which is
+    exactly what a CDP mouse event expects. An interactive widget exposes a
+    real checkbox element and that wins; a passive (managed) widget paints its
+    tick on a canvas and exposes nothing, so the widget's fixed geometry is
+    used instead — its tick box is the 30x30 square inset from the left edge.
+    """
+    frame = _hobbydigi_widget_frame(page)
+    if frame is None:
+        return None
+    try:
+        handle = frame.frame_element()
+        frame_box = handle.bounding_box() if handle is not None else None
+    except Exception:
+        return None
+    if not frame_box:
+        return None
+    for selector in HD_CHECKBOX_SELECTORS:
+        inner = frame.query_selector(selector)
+        box = inner.bounding_box() if inner is not None else None
+        if box:
+            return (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    return (frame_box["x"] + HD_CHECKBOX_INSET_X,
+            frame_box["y"] + frame_box["height"] / 2)
+
+
+def _hobbydigi_ghost_click(page, point):
+    """Click viewport `point` with a trusted, browser-level mouse event.
+
+    `element.click()` and Playwright's own click are both ignored here:
+    Cloudflare discards events whose isTrusted is false, which is every event
+    synthesised from page scripts. CDP `Input.dispatchMouseEvent` enters the
+    renderer's input pipeline instead, so the widget sees a real pointer. The
+    hover first keeps the sequence shaped like a human's move-then-press.
+    """
+    x, y = point
+    client = page.context.new_cdp_session(page)
+    try:
+        client.send("Input.dispatchMouseEvent",
+                    {"type": "mouseMoved", "x": x, "y": y, "buttons": 0})
+        client.send("Input.dispatchMouseEvent",
+                    {"type": "mousePressed", "x": x, "y": y, "button": "left",
+                     "buttons": 1, "clickCount": 1})
+        client.send("Input.dispatchMouseEvent",
+                    {"type": "mouseReleased", "x": x, "y": y, "button": "left",
+                     "buttons": 0, "clickCount": 1})
+    finally:
+        client.detach()
+
+
+def _hobbydigi_solve_challenge(page, budget_s):
+    """Tick the Turnstile checkbox until the interstitial goes away.
+
+    True once the challenge has cleared. A wrong tick makes Cloudflare re-arm
+    and sometimes relocate the widget, so every attempt re-measures the
+    checkbox rather than replaying the coordinates that just failed.
+    """
+    deadline = time.monotonic() + budget_s
+    clicks = 0
+    while time.monotonic() < deadline and clicks < HD_CLICK_ATTEMPTS:
+        if not _hobbydigi_challenged(page):
+            return True
+        point = _hobbydigi_checkbox_point(page)
+        if point is None:
+            page.wait_for_timeout(HD_CLICK_POLL_MS)
+            continue
+        _hobbydigi_ghost_click(page, point)
+        clicks += 1
+        print(f"   🖱️  ghost-clicked the Cloudflare tick box at "
+              f"({point[0]:.0f}, {point[1]:.0f}) — "
+              f"attempt {clicks}/{HD_CLICK_ATTEMPTS}")
+        page.wait_for_timeout(HD_CLICK_SETTLE_MS)
+    return not _hobbydigi_challenged(page)
+
+
+@functools.lru_cache(maxsize=1)
+def _chrome_is_installed():
+    """True when a branded Chrome is present to launch instead of Chromium."""
+    if sys.platform == "darwin":
+        return any(os.path.isfile(path) for path in CHROME_APP_PATHS)
+    return any(shutil.which(name) for name in CHROME_BINARIES)
+
+
+def _hobbydigi_channel():
+    """Browser channel to launch, or None for Playwright's bundled Chromium."""
+    choice = os.environ.get("HD_BROWSER_CHANNEL", "").strip()
+    if choice.lower() in ("0", "false", "no", "off", "none", "chromium"):
+        return None
+    if choice:
+        return choice
+    return "chrome" if _chrome_is_installed() else None
+
+
+def _hobbydigi_channel_kwargs():
+    """Launch kwargs pinning the branded channel, empty when there is none."""
+    channel = _hobbydigi_channel()
+    return {"channel": channel} if channel else {}
+
+
+def _hobbydigi_clearance(cookies):
+    """The cf_clearance cookie, or None when the jar never cleared."""
+    for cookie in cookies or ():
+        if cookie.get("name") == HD_CLEARANCE_COOKIE:
+            return cookie
+    return None
+
+
+# Google Analytics and Ads-conversion cookies are set on the shop's own domain,
+# so a domain filter alone keeps them; they are named here because they are the
+# one first-party-domain family that is pure third-party tracking.
+HD_TRACKING_COOKIE_PREFIXES = ("_ga", "_gcl_")
+
+
+def _hobbydigi_prune_cookies(cookies):
+    """Only the shop's own cookies, and none of Google's.
+
+    A crawl page incidentally picks up third-party tracking identifiers
+    (.youtube.com, .doubleclick.net, the _ga family). None of them can carry a
+    clearance, they bloat the credential file, and writing them to data/ leaks
+    identifiers that have nothing to do with this project.
+    """
+    kept = []
+    for cookie in cookies:
+        if (cookie.get("name") or "").startswith(HD_TRACKING_COOKIE_PREFIXES):
+            continue
+        domain = (cookie.get("domain") or "").lstrip(".")
+        if domain == HOBBYDIGI_COOKIE_DOMAIN or \
+                domain.endswith("." + HOBBYDIGI_COOKIE_DOMAIN):
+            kept.append(cookie)
+    return kept
+
+
+def _hobbydigi_jar_is_stale(jar):
+    """Why this jar cannot be replayed, or '' when it can."""
+    if not isinstance(jar, dict):
+        return "malformed"
+    if not _hobbydigi_clearance(jar.get("cookies") or []):
+        return "no cf_clearance"
+    if not jar.get("user_agent"):
+        return "saved before the user agent was recorded"
+    saved_at = jar.get("saved_at")
+    if not isinstance(saved_at, (int, float)):
+        return "saved before the age was recorded"
+    age_s = time.time() - saved_at
+    if age_s > HD_CLEARANCE_MAX_AGE_S:
+        return (f"{age_s / 3600:.1f}h old, past the "
+                f"{HD_CLEARANCE_MAX_AGE_S // 3600}h bound")
+    return ""
+
+
+def _hobbydigi_valid_jar():
+    """`(path, jar)` for a replayable clearance jar, or `(None, None)`.
+
+    Replaying a dead jar is worse than starting clean: Cloudflare scores the
+    rejected credential, and every retry browser inherits the same rejection,
+    which is the loop this check exists to break.
+    """
+    for directory in _search_dirs():
+        candidate = os.path.join(directory, HOBBYDIGI_STATE_FILENAME)
+        if not os.path.isfile(candidate):
+            continue
+        try:
+            with open(candidate, encoding="utf-8") as f:
+                jar = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"   ⚠️  ignoring unreadable {candidate}: {exc}")
+            return None, None
+        stale = _hobbydigi_jar_is_stale(jar)
+        if stale:
+            print(f"   ⚠️  {candidate} is stale ({stale}) — earning a fresh "
+                  f"clearance instead of replaying it")
+            return None, None
+        return candidate, jar
+    return None, None
+
+
+def _hobbydigi_state_path():
+    """A saved Cloudflare-clearing cookie jar, or None when there is none."""
+    return _hobbydigi_valid_jar()[0]
+
+
+def _hobbydigi_real_user_agent(context):
+    """The User-Agent this browser actually reports.
+
+    Read from the engine rather than configured, so it can never disagree with
+    the `sec-ch-ua` Client Hints sent alongside it in the same request. A
+    hardcoded UA string does disagree — Playwright rewrites the header and
+    `navigator.userAgent` but not the hints — and that contradiction is exactly
+    what a bot score is looking for.
+    """
+    page = context.pages[0] if context.pages else context.new_page()
+    return page.evaluate("navigator.userAgent")
+
+
+def _hobbydigi_replay_jar(context):
+    """Seed a freshly launched context from the jar; return `(page, path)`.
+
+    The jar is only replayed when its recorded User-Agent matches the one this
+    browser really sends: `cf_clearance` is bound to that string, so replaying
+    it under a different one hands Cloudflare a credential it will reject while
+    making the request look tampered with.
+    """
+    page = context.pages[0] if context.pages else context.new_page()
+    if _hobbydigi_clearance(context.cookies()):
+        return page, None
+    path, jar = _hobbydigi_valid_jar()
+    if jar is None:
+        return page, None
+    if jar["user_agent"] != page.evaluate("navigator.userAgent"):
+        print(f"   ⚠️  {path} was earned under a different user agent — "
+              f"not replaying it")
+        return page, None
+    context.add_cookies(jar["cookies"])
+    print(f"   🍪 replayed cf_clearance from {path}")
+    return page, path
+
+
+def _hobbydigi_save_state(context):
+    """Export a clearance-earning jar for the isolated fallback path.
+
+    Only a context that actually holds cf_clearance is saved; a challenged one
+    would overwrite a working jar and cost the next run the tick that bought it.
+    The real User-Agent and the save time are recorded alongside the cookies,
+    because those two are what `_hobbydigi_valid_jar` needs to retire the jar
+    later.
+    """
+    cookies = context.cookies()
+    if not _hobbydigi_clearance(cookies):
+        return False
+    state = context.storage_state()
+    state["cookies"] = _hobbydigi_prune_cookies(state.get("cookies") or [])
+    state["origins"] = []
+    state["user_agent"] = _hobbydigi_real_user_agent(context)
+    state["saved_at"] = time.time()
+    path = os.path.join(os.getcwd(), HOBBYDIGI_STATE_FILENAME)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=1, sort_keys=True)
+    except OSError as exc:
+        print(f"   ⚠️  could not write {path}: {exc}")
+        return False
+    print(f"   🍪 cf_clearance saved → {path}")
+    return True
+
+
+def _hobbydigi_quarantine_jar(path):
+    """Move a jar Cloudflare keeps rejecting out of the replay path.
+
+    Called only once every attempt that loaded it has failed, so a transient
+    block cannot discard a clearance a human paid for.
+    """
+    quarantined = path + ".quarantined"
+    try:
+        os.replace(path, quarantined)
+    except OSError as exc:
+        print(f"   ⚠️  could not quarantine {path}: {exc}")
+        return
+    print(f"   🚫 rejected cf_clearance quarantined → {quarantined}")
 
 
 def _hobbydigi_page(page, url, budget_s):
@@ -646,9 +1057,11 @@ def _hobbydigi_page(page, url, budget_s):
     mistaken for a bot block.
     """
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    if not HEADLESS and _hobbydigi_challenged(page):
-        input("   👤 Tick the Cloudflare check in the browser window, "
-              "wait for the listing to appear, then press Enter here... ")
+    if _hobbydigi_challenged(page):
+        if not _hobbydigi_solve_challenge(page, budget_s):
+            raise RuntimeError(
+                f"Cloudflare challenge did not clear for {url} (now at {page.url}) "
+                f"— {HD_CLICK_ATTEMPTS} ghost clicks spent")
     for _ in range(HD_CHALLENGE_RETRIES):
         try:
             page.wait_for_selector("li.product-item", timeout=budget_s * 1000)
@@ -659,7 +1072,84 @@ def _hobbydigi_page(page, url, budget_s):
             page.wait_for_timeout(5000)
     raise RuntimeError(
         f"Cloudflare challenge did not clear for {url} (now at {page.url}) "
-        f"— set HEADLESS = False to watch")
+        f"— {HD_CLICK_ATTEMPTS} ghost clicks spent")
+
+
+def _hobbydigi_fetch_page(page, url):
+    """Read one listing page without navigating, from an already-cleared page.
+
+    Cloudflare budgets *navigations* per cookie jar. A same-origin `fetch()`
+    issued by the page that already holds the clearance rides on that clearance
+    instead of spending another one, which is what lets a whole crawl run on a
+    single verification. An empty card list still means the listing is
+    exhausted; only an interstitial or a non-200 is an error, so a genuine last
+    page cannot be mistaken for a block.
+    """
+    result = page.evaluate(_HOBBYDIGI_FETCH_JS, {"url": url})
+    if _hobbydigi_title_challenged(result.get("title")):
+        raise RuntimeError(f"Cloudflare re-challenged the in-page fetch of {url}")
+    status = result.get("status")
+    if status != 200:
+        raise RuntimeError(f"{url} returned HTTP {status}")
+    return result.get("cards") or []
+
+
+class _HobbydigiSession:
+    """One browser that cleared Cloudflare and now serves in-page fetches."""
+
+    def __init__(self, context, page, cards):
+        self.context = context
+        self.page = page
+        self.cards = cards
+
+    def close(self):
+        self.context.close()
+
+
+def _hobbydigi_profile_dir():
+    """The persistent profile holding this host's Cloudflare clearance."""
+    return os.path.join(os.getcwd(), HD_PROFILE_DIRNAME)
+
+
+def _hobbydigi_launch_profile(playwright):
+    """Open the persistent profile browser; return `(context, replayed_jar)`.
+
+    The profile is what makes a later run cheap: it keeps the clearance, the
+    HTTP cache and the service workers together, so the second page of a crawl
+    and the first page of next week's crawl both look like the same returning
+    visitor. A cookie-only replay cannot do that.
+    """
+    directory = _hobbydigi_profile_dir()
+    os.makedirs(directory, exist_ok=True)
+    context = playwright.chromium.launch_persistent_context(
+        directory,
+        headless=HD_HEADLESS,
+        args=HD_BROWSER_ARGS,
+        viewport=HD_VIEWPORT,
+        locale=HD_LOCALE,
+        **_hobbydigi_channel_kwargs(),
+    )
+    return context, _hobbydigi_replay_jar(context)[1]
+
+
+def _hobbydigi_open_session(playwright, url):
+    """Clear `url` in the persistent profile and return the live session.
+
+    The jar is quarantined when this fails, because a session that cannot clear
+    its first page while replaying a credential is the signature of a credential
+    Cloudflare has already revoked.
+    """
+    context, jar_path = _hobbydigi_launch_profile(playwright)
+    try:
+        page = context.pages[0] if context.pages else context.new_page()
+        cards = _hobbydigi_page(page, url, HD_CHALLENGE_WAIT_S)
+        _hobbydigi_save_state(context)
+        return _HobbydigiSession(context, page, cards)
+    except Exception:
+        context.close()
+        if jar_path:
+            _hobbydigi_quarantine_jar(jar_path)
+        raise
 
 
 def _hobbydigi_page_isolated(playwright, url):
@@ -671,6 +1161,10 @@ def _hobbydigi_page_isolated(playwright, url):
     a complete one: measured 8 pages / 224 cards with zero blocks, where a single
     reused context died on page 3.
 
+    This is the recovery path for a crawl whose session was challenged mid-walk;
+    `_hobbydigi_crawl` is the one that normally runs, and it navigates once
+    rather than once per page.
+
     The same remedy applies to one page hit by a transient challenge, so the
     relaunch is retried here rather than only across pages. Without it a single
     unlucky interstitial on page 1 aborts the whole crawl — observed in
@@ -679,15 +1173,19 @@ def _hobbydigi_page_isolated(playwright, url):
     partial-catalogue salvage still applies.
     """
     last = None
+    jar_path = None
     for attempt in range(1, HD_BROWSER_ATTEMPTS + 1):
-        browser = playwright.chromium.launch(headless=HEADLESS)
+        browser = playwright.chromium.launch(headless=HD_HEADLESS,
+                                             args=HD_BROWSER_ARGS,
+                                             **_hobbydigi_channel_kwargs())
         try:
-            context = browser.new_context(
-                user_agent=USER_AGENT,
-                viewport={"width": 1920, "height": 1080},
-                locale="zh-HK",
-            )
-            return _hobbydigi_page(context.new_page(), url, HD_CHALLENGE_WAIT_S)
+            context = browser.new_context(viewport=HD_VIEWPORT, locale=HD_LOCALE)
+            page, replayed = _hobbydigi_replay_jar(context)
+            jar_path = replayed or jar_path
+            cards = _hobbydigi_page(page, url, HD_CHALLENGE_WAIT_S)
+            if cards:
+                _hobbydigi_save_state(context)
+            return cards
         except Exception as exc:
             last = exc
             if attempt < HD_BROWSER_ATTEMPTS:
@@ -697,9 +1195,81 @@ def _hobbydigi_page_isolated(playwright, url):
                 time.sleep(HD_BROWSER_BACKOFF_S)
         finally:
             browser.close()
+    if jar_path:
+        _hobbydigi_quarantine_jar(jar_path)
     raise RuntimeError(
         f"{url} still blocked after {HD_BROWSER_ATTEMPTS} fresh browsers: {last}"
     ) from last
+
+
+def _hobbydigi_crawl(playwright, base):
+    """Walk the whole listing; return `(cards, blocked)`.
+
+    Clears the challenge once, in one persistent-profile browser, then reads
+    every later page with a same-origin in-page fetch from that cleared page.
+    Navigating per page instead spent a fresh Cloudflare budget per page, which
+    is what forced the browser-per-page isolation this replaces: a 28-page crawl
+    launched 28 browsers (up to 84 with retries), each a new TLS handshake and a
+    new client profile from one IP. This makes roughly one navigation in total.
+
+    `HD_PAGE_WAIT_S` between pages is kept unchanged — the point of the fetch
+    path is fewer requests, not faster ones.
+
+    A page challenged mid-walk is recovered in an isolated browser and the
+    session is reopened for the rest. Only when that also fails does the crawl
+    fall back to the previous complete crawl's cached cards, exactly as the
+    per-page version did, and report `blocked` so the run is visibly stale
+    rather than silently partial.
+    """
+    cards = []
+    seen_urls = set()
+    page_num = 1
+    session = None
+    try:
+        while page_num <= HD_MAX_PAGES:
+            url = f"{base}?p={page_num}"
+            if session is None:
+                session = _hobbydigi_open_session(playwright, url)
+                batch = session.cards
+                print(f"   🌐 session cleared — later pages are in-page fetches")
+            else:
+                try:
+                    batch = _hobbydigi_fetch_page(session.page, url)
+                except RuntimeError as exc:
+                    session.close()
+                    session = None
+                    print(f"   ⚠️  {exc} — recovering in an isolated browser")
+                    batch = _hobbydigi_page_isolated(playwright, url)
+            if not batch:
+                print(f"   — page {page_num}: no cards, listing exhausted")
+                break
+            added = 0
+            for card in batch:
+                href = card.get("href") or ""
+                if not href or href in seen_urls:
+                    continue
+                seen_urls.add(href)
+                cards.append(card)
+                added += 1
+            print(f"   Page {page_num}: {len(batch)} cards (+{added} new)")
+            if added == 0:
+                print("   ⚠️  No new cards — pagination wrapped, stopping")
+                break
+            page_num += 1
+            time.sleep(HD_PAGE_WAIT_S)
+    except RuntimeError as exc:
+        cached = _load_cached_cards()
+        if cached is None:
+            raise
+        print(f"   ⚠️  page {page_num} blocked by Cloudflare ({exc}) — "
+              f"using {len(cached)} cached cards")
+        return cached, True
+    finally:
+        if session is not None:
+            session.close()
+    if page_num > HD_MAX_PAGES:
+        print(f"   ⚠️  Safety limit of {HD_MAX_PAGES} pages reached — stopping")
+    return cards, False
 
 
 def _hobbydigi_grades(cards, api_key):
@@ -861,44 +1431,9 @@ def scrape_hobbydigi(listing_path):
     sync_playwright = _require_playwright()
     matches = _load_matches()
 
-    cards = []
-    seen_urls = set()
-    base = HOBBYDIGI_BASE_URL + listing_path
-    page_num = 1
-    blocked = False
-
     with sync_playwright() as p:
-        while page_num <= HD_MAX_PAGES:
-            try:
-                batch = _hobbydigi_page_isolated(p, f"{base}?p={page_num}")
-            except RuntimeError as exc:
-                cards = _load_cached_cards()
-                if cards is None:
-                    raise
-                print(f"   ⚠️  page {page_num} blocked by Cloudflare ({exc}) — "
-                      f"using {len(cards)} cached cards")
-                blocked = True
-                break
-            if not batch:
-                print(f"   — page {page_num}: no cards, listing exhausted")
-                break
-            added = 0
-            for card in batch:
-                url = card.get("href") or ""
-                if not url or url in seen_urls:
-                    continue
-                seen_urls.add(url)
-                cards.append(card)
-                added += 1
-            print(f"   Page {page_num}: {len(batch)} cards (+{added} new)")
-            if added == 0:
-                print("   ⚠️  No new cards — pagination wrapped, stopping")
-                break
-            page_num += 1
-            time.sleep(PAGE_WAIT_S)
+        cards, blocked = _hobbydigi_crawl(p, HOBBYDIGI_BASE_URL + listing_path)
 
-    if page_num > HD_MAX_PAGES:
-        print(f"   ⚠️  Safety limit of {HD_MAX_PAGES} pages reached — stopping")
     if not cards:
         return {}, {}
 
@@ -997,7 +1532,7 @@ def _is_fookle_kit(product):
     if FOOKLE_BRAND_SLUG not in brands:
         return False
     name = html.unescape(product.get("name") or "")
-    return not FOOKLE_SKIP_RE.search(name)
+    return not ACCESSORY_SKIP_RE.search(name)
 
 
 def _fetch_fookle_page(category_id, page):
@@ -1143,6 +1678,265 @@ def _print_fookle_report(stats):
           f"(no JAN — keyed FM:<slug>)")
 
 
+# --- twinnermodel.com (千里達模型, Shopify behind bot protection) ---
+
+_TWINNER_FETCH_JS = """async ([handle, pageNumber]) => {
+  const url = `/collections/${handle}/products.json?limit=250&page=${pageNumber}`;
+  const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
+  const text = await resp.text();
+  if (!resp.ok) return {status: resp.status, body: text.slice(0, 200)};
+  return {status: resp.status, body: text};
+}"""
+
+
+def twinner_available_variant(product):
+    """The first purchasable variant, or None when the kit is sold out.
+
+    Reproduces the site's own ``filter.v.availability=1`` facet: products.json
+    ignores filter parameters, so availability is applied here instead.
+    """
+    for variant in product.get("variants") or []:
+        if variant.get("available"):
+            return variant
+    return None
+
+
+def _is_twinner_kit(product):
+    """In-stock, Bandai-vendor, and not an obvious decal/tool accessory.
+
+    The vendor + availability checks reproduce the collection URL's
+    ``filter.p.vendor=Bandai&filter.v.availability=1`` facets client-side.
+    """
+    if (product.get("vendor") or "").strip().lower() != TWINNER_VENDOR.lower():
+        return False
+    if twinner_available_variant(product) is None:
+        return False
+    return not ACCESSORY_SKIP_RE.search(product.get("title") or "")
+
+
+def twinner_product_url(handle):
+    return f"{TWINNER_BASE_URL}/products/{handle}"
+
+
+def twinner_sell_type(product):
+    """Twinner titles carry no 預訂/現貨 wording; availability already means 現貨."""
+    title = product.get("title") or ""
+    if re.match(r"\s*(預訂|預購|訂貨)", title):
+        return "預訂"
+    return "現貨"
+
+
+def twinner_exclusive_sku(url):
+    """Provisional key for a kit no other shop matched to: TM:<url slug>.
+
+    Mirrors fookle_exclusive_sku — never a 13-digit JAN, so it can't join
+    another shop's row, and stable for as long as the product URL is.
+    """
+    path = urllib.parse.urlparse(url or "").path
+    slug = urllib.parse.unquote(path.rstrip("/").rsplit("/", 1)[-1])
+    return f"{TWINNER_EXCLUSIVE_PREFIX}{slug}" if slug else ""
+
+
+def twinner_row(product, sku):
+    """One products.json product -> the same columns as a Hobbyland CSV row.
+
+    Prices arrive as plain decimal strings in the shop's base currency (HKD —
+    the storefront renders TWD at the visitor's rate), so they pass straight
+    through to the backend's bare Number() parser.
+    """
+    variant = twinner_available_variant(product) or {}
+    images = product.get("images") or []
+    first = images[0] if images else {}
+    handle = product.get("handle") or ""
+    return {
+        "title": html.unescape(product.get("title") or "").strip(),
+        "price": variant.get("price") or "",
+        "url": twinner_product_url(handle),
+        "regular_price": variant.get("compare_at_price") or "",
+        "sku": sku,
+        "stock": "",
+        "sell_type": twinner_sell_type(product),
+        "image_url": first.get("src") or "",
+    }
+
+
+def _fetch_twinner_page(page, handle, page_num):
+    """GET one products.json page from inside the warmed browser context.
+
+    A non-200 (typically the 429 the shop serves cold clients) raises so
+    _with_retry waits it out.
+    """
+    result = page.evaluate(_TWINNER_FETCH_JS, [handle, page_num])
+    status = result.get("status")
+    if status != 200:
+        raise RuntimeError(
+            f"products.json page {page_num} for {handle}: HTTP {status} "
+            f"{(result.get('body') or '')[:120]}")
+    payload = json.loads(result.get("body") or "")
+    products = payload.get("products")
+    if not isinstance(products, list):
+        raise RuntimeError(f"unexpected products.json shape for {handle}")
+    return products
+
+
+def fetch_twinner_page(page, handle, page_num):
+    """One twinnermodel products.json page, retrying transient failures."""
+    return _with_retry(lambda: _fetch_twinner_page(page, handle, page_num),
+                       f"[{handle}] page {page_num}")
+
+
+def scrape_twinner_grade(page, handle, grade):
+    """Page one twinnermodel collection, keeping in-stock Bandai kits.
+
+    The collection handle already fixes the grade. The listing ends at the
+    first short page (an out-of-range page returns an empty list).
+    """
+    products = []
+    seen_ids = set()
+    for page_num in range(1, TWINNER_MAX_PAGES + 1):
+        batch = fetch_twinner_page(page, handle, page_num)
+        kept = 0
+        for product in batch:
+            pid = product.get("id")
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            if _is_twinner_kit(product):
+                products.append(product)
+                kept += 1
+        print(f"   [{grade.upper()}] page {page_num}: {len(batch)} products "
+              f"(+{kept} Bandai in-stock kits)")
+        if len(batch) < TWINNER_PER_PAGE:
+            break
+        time.sleep(PAGE_WAIT_S)
+    else:
+        print(f"   ⚠️  [{grade.upper()}] safety limit of "
+              f"{TWINNER_MAX_PAGES} pages reached")
+    return products
+
+
+def _resolve_twinner(products, grade, catalogue):
+    """Establish a JAN for every twinnermodel kit, in order of trust.
+
+    The handle is the JAN for nearly every kit; the fallbacks are the same as
+    fookle's — a JAN in the title, then the trusted catalogue, never a model
+    guess. `sku` is '' when no source produced one, so the caller stores the
+    kit under a provisional TM:<slug> key.
+    """
+    resolved = []
+    for product in products:
+        title = html.unescape(product.get("title") or "")
+        url = twinner_product_url(product.get("handle") or "")
+        sku, source = "", ""
+        for candidate, label in (
+                (deepseek_resolve.is_plausible_jan(product.get("handle"))[0], "handle"),
+                (deepseek_resolve.is_plausible_jan(jan_from_name(title))[0], "name"),
+                (deepseek_resolve.jan_from_url(url), "url")):
+            if candidate:
+                sku, source = candidate, label
+                break
+        if not sku:
+            sku = catalogue.lookup(title, grade)[0]
+            source = "catalogue" if sku else ""
+        resolved.append({"sku": sku, "grade": grade, "source": source,
+                         "title": title, "url": url})
+    ambiguous = _quash_collisions(resolved)
+    return resolved, ambiguous
+
+
+def _twinner_warm_up(page, first_handle):
+    """Open one collection page so the browser clears Shopify's bot check.
+
+    Cold clients are rate-limited on every endpoint; a rendered listing page
+    proves the session, after which products.json answers normally.
+    """
+    url = f"{TWINNER_BASE_URL}/collections/{first_handle}"
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    try:
+        page.wait_for_selector("product-card", timeout=AP_CHALLENGE_WAIT_S * 1000)
+    except Exception:
+        raise RuntimeError(
+            f"twinnermodel listing did not render for {url} (now at {page.url}) "
+            "— set HEADLESS = False to watch") from None
+
+
+def scrape_twinner(collections):
+    """Crawl twinnermodel's Bandai hg/mg/rg collections and bucket rows by grade.
+
+    Returns `(buckets, stats)` like scrape_fookle: grade is fixed by the
+    collection, the JAN comes from the handle (or the trusted catalogue), and
+    an unresolved kit is kept under a provisional TM:<slug> key so it shows as
+    Twinnermodel-only rather than guessing a barcode.
+    """
+    db_path = _catalogue_path()
+    if db_path is None:
+        raise RuntimeError(
+            f"{DATABASE_FILENAME} not found — import at least one CSV first, so "
+            "there is a trusted catalogue to inherit JANs from")
+    # Twinnermodel's, Fookle's and HobbyDigi's own rows are excluded: their
+    # JANs are derived by this matcher, so including them would let a wrong
+    # answer confirm itself.
+    catalogue = jan_lookup.JanCatalogue.from_database(
+        db_path, exclude_shops=(TWINNER_SHOP_CODE, FOOKLE_SHOP_CODE,
+                                HOBBYDIGI_SHOP_CODE))
+    print(f"   📚 {len(catalogue.entries)} trusted JANs from {db_path}")
+
+    buckets = {grade: [] for grade in deepseek_resolve.GRADES}
+    stats = {"products": 0, "handle": 0, "name": 0, "url": 0, "catalogue": 0,
+             "exclusive": 0, "ambiguous": 0}
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError(
+            "twinnermodel.com requires a real browser (Shopify bot protection) "
+            "— install Playwright: pip install playwright && "
+            "python3 -m playwright install chromium") from exc
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=HEADLESS)
+        context = browser.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1920, "height": 1080},
+            locale="zh-HK",
+        )
+        page = context.new_page()
+        _twinner_warm_up(page, next(iter(collections.values())))
+        for grade in deepseek_resolve.GRADES:
+            handle = collections.get(grade)
+            if handle is None:
+                continue
+            print(f"\n   🔗 [{grade.upper()}] "
+                  f"{TWINNER_BASE_URL}/collections/{handle}/products.json")
+            products = scrape_twinner_grade(page, handle, grade)
+            stats["products"] += len(products)
+            resolved, ambiguous = _resolve_twinner(products, grade, catalogue)
+            stats["ambiguous"] += ambiguous
+            for product, item in zip(products, resolved):
+                sku = item["sku"]
+                if sku:
+                    stats[item["source"]] += 1
+                else:
+                    sku = twinner_exclusive_sku(item["url"])
+                    stats["exclusive"] += bool(sku)
+                if sku:
+                    buckets[grade].append(twinner_row(product, sku))
+        browser.close()
+    return buckets, stats
+
+
+def _print_twinner_report(stats):
+    """Print the twinnermodel resolution report — how each kit got its JAN."""
+    print(f"\n   📊 {stats['products']} Bandai in-stock kits")
+    print(f"      JAN from handle    : {stats['handle']}")
+    print(f"      JAN in name        : {stats['name']}")
+    print(f"      JAN in URL         : {stats['url']}")
+    print(f"      JAN by catalogue   : {stats['catalogue']}")
+    print(f"      variants quashed   : {stats['ambiguous']}  "
+          f"(one barcode, two kits)")
+    print(f"      stored Twinner-only: {stats['exclusive']}  "
+          f"(no JAN — keyed TM:<slug>)")
+
+
 def _print_preview(products, limit=3):
     """First few saved rows, as a sanity check that the scrape looks sane."""
     for product in products[:limit]:
@@ -1154,12 +1948,13 @@ def _print_preview(products, limit=3):
 
 def main(argv):
     print("=" * 70)
-    print("  HOBBYLAND / ANIMES-PRO / HOBBYDIGI / FOOKLE — GUNPLA CATALOG SCRAPER")
+    print("  HOBBYLAND / ANIMES-PRO / HOBBYDIGI / FOOKLE / TWINNERMODEL "
+          "— GUNPLA CATALOG SCRAPER")
     print("=" * 70 + "\n")
 
     # Merge every category dict for CLI lookup
     all_cats = {**CATEGORIES, **ANIME_PRO_CATEGORIES, **HOBBYDIGI_CATEGORIES,
-                **FOOKLE_CATEGORIES}
+                **FOOKLE_CATEGORIES, **TWINNER_CATEGORIES}
 
     # Optional argv selects categories; default = all
     keys = [arg.lower() for arg in argv]
@@ -1174,6 +1969,36 @@ def main(argv):
     exit_code = 0
     for key in keys:
         label = key.upper()
+
+        if key in TWINNER_CATEGORIES:
+            # --- twinnermodel.com (Shopify products.json via browser) branch ---
+            shop_code, collections = TWINNER_CATEGORIES[key]
+            print(f"🔗 [{label}] Collections: "
+                  + ", ".join(f"{g}={h}" for g, h in collections.items())
+                  + f" (vendor={TWINNER_VENDOR}, in stock)\n")
+            try:
+                buckets, stats = scrape_twinner(collections)
+            except Exception as exc:
+                print(f"\n❌ [{label}] Scraping failed: {exc}\n")
+                exit_code = 1
+                continue
+            _print_twinner_report(stats)
+            if not any(buckets.values()):
+                print(f"\n❌ [{label}] No products resolved — no CSV written.\n")
+                exit_code = 1
+                continue
+            for grade in deepseek_resolve.GRADES:
+                rows = buckets.get(grade) or []
+                if not rows:
+                    print(f"   ⚠️  [{label}] no {grade.upper()} kits — "
+                          f"{shop_code}_{grade}.csv not written")
+                    continue
+                csv_name = save_csv(rows, f"{shop_code}_{grade}.csv")
+                print(f"\n✅ [{label}] Saved {len(rows)} {grade.upper()} "
+                      f"products → {csv_name}\n")
+                _print_preview(rows)
+            print()
+            continue
 
         if key in FOOKLE_CATEGORIES:
             # --- fooklemodel.com (WooCommerce Store API) branch ---

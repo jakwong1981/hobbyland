@@ -1,5 +1,5 @@
 // backend/src/types/index.ts
-export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi', 'fookle'] as const;
+export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi', 'fookle', 'twinnermodel'] as const;
 export type ShopCode = (typeof SHOP_CODES)[number];
 
 export const GRADES = ['hg', 'mg', 'rg'] as const;
@@ -21,6 +21,7 @@ export interface ComparisonRow {
   sku: string;
   grade: Grade;
   title: string;
+  series: string | null;
   offers: Offer[];
   cheapestShop: CheapestShop;
   saving: number | null;
@@ -54,6 +55,7 @@ export interface ProductRow {
   stock: string | null;
   sellType: string | null;
   imageUrl: string | null;
+  series: string | null;
   importedAt: string;
 }
 
@@ -66,6 +68,7 @@ export interface CsvProductRecord {
   stock: string | null;
   sellType: string | null;
   imageUrl: string | null;
+  series: string | null;
 }
 
 export interface ImportResult {

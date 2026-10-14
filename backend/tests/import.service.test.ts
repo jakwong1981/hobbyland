@@ -112,6 +112,47 @@ describe('importProducts', () => {
     expect(product.price).toBe(88);
     expect(product.stock).toBe('3');
   });
+
+  it('maps the series column through to the stored product', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const { records } = parseProductCsv(
+      `${HEADER},series\nKit A,100,https://x,120,111,5,現貨,zeta\n`,
+    );
+
+    expect(records[0]!.series).toBe('zeta');
+
+    importProducts(repo, 'hobbyland', 'hg', 'hobbyland_hg.csv', records, 0);
+
+    expect(repo.findProducts({ shop: 'hobbyland' })[0]!.series).toBe('zeta');
+  });
+
+  it('stores null series when the CSV has no series column and keeps it on stale re-import', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const withSeries = parseProductCsv(
+      `${HEADER},series\nKit A,100,https://x,120,111,5,現貨,seed\n`,
+    ).records;
+    const stale = parseProductCsv(`${HEADER}\nKit A,88,https://x,120,111,3,現貨\n`).records;
+
+    importProducts(repo, 'hobbyland', 'hg', 'hobbyland_hg.csv', withSeries, 0);
+    importProducts(repo, 'hobbyland', 'hg', 'hobbyland_hg.csv', stale, 0);
+
+    const product = repo.findProducts({ shop: 'hobbyland' })[0]!;
+    expect(product.series).toBe('seed');
+    expect(product.price).toBe(88);
+  });
+
+  it('filters products by series', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const { records } = parseProductCsv(
+      `${HEADER},series\nKit A,100,https://x,120,111,5,現貨,zeta\nKit B,90,https://y,90,222,1,現貨,seed\n`,
+    );
+
+    importProducts(repo, 'hobbyland', 'hg', 'hobbyland_hg.csv', records, 0);
+
+    const filtered = repo.findProducts({ series: 'zeta' });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]!.sku).toBe('111');
+  });
 });
 
 describe('buildFreshness', () => {
@@ -132,6 +173,7 @@ describe('buildFreshness', () => {
         'animes-pro': '2026-10-11T11:00:00.000Z',
         hobbydigi: null,
         fookle: null,
+        twinnermodel: null,
       },
     });
   });
@@ -163,7 +205,7 @@ describe('buildFreshness', () => {
     const freshness = buildFreshness([], 'mg');
 
     expect(freshness.overall).toBeNull();
-    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null, hobbydigi: null, fookle: null });
+    expect(freshness.byShop).toEqual({ hobbyland: null, 'animes-pro': null, hobbydigi: null, fookle: null, twinnermodel: null });
   });
 
   it('counts a shop the union does not know about towards overall', () => {
@@ -206,6 +248,19 @@ describe('buildFreshness', () => {
     importProducts(repo, 'fookle', 'hg', 'fookle_hg.csv', linked, 0);
 
     const skus = repo.findProducts({ shop: 'fookle' }).map((product) => product.sku);
+    expect(skus).toEqual(['4573102663849']);
+  });
+
+  it('replaces a provisional TM: row by URL once the kit gets a real JAN', () => {
+    const repo = new ProductRepository(createInMemoryDatabase());
+    const url = 'https://twinnermodel.com/products/some-slug';
+    const provisional = parseProductCsv(`${HEADER}\nKit,100,${url},,TM:some-slug,,\n`).records;
+    importProducts(repo, 'twinnermodel', 'hg', 'twinnermodel_hg.csv', provisional, 0);
+
+    const linked = parseProductCsv(`${HEADER}\nKit,100,${url},,4573102663849,,\n`).records;
+    importProducts(repo, 'twinnermodel', 'hg', 'twinnermodel_hg.csv', linked, 0);
+
+    const skus = repo.findProducts({ shop: 'twinnermodel' }).map((product) => product.sku);
     expect(skus).toEqual(['4573102663849']);
   });
 

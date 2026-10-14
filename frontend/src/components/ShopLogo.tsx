@@ -8,6 +8,7 @@ const SHAPE: Record<ShopCode, ReactElement> = {
   'animes-pro': <circle className="shop-logo-shape" cx="12" cy="12" r="10.5" />,
   'hobbydigi': <polygon className="shop-logo-shape" points="12,1 23,12 12,23 1,12" />,
   'fookle': <rect className="shop-logo-shape" x="2" y="2" width="20" height="20" rx="5.5" />,
+  'twinnermodel': <polygon className="shop-logo-shape" points="12,2 22,20 2,20" />,
 };
 
 export function ShopLogo({ shop }: { shop: ShopCode }) {

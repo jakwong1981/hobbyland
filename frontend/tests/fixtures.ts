@@ -20,6 +20,7 @@ export function buildRow(overrides: Partial<ComparisonRow> = {}): ComparisonRow 
     sku: '4573102000001',
     grade: 'hg',
     title: 'HG Gundam',
+    series: null,
     offers: [
       buildOffer({ shop: 'hobbyland', price: 78 }),
       buildOffer({ shop: 'animes-pro', price: 100 }),
@@ -43,6 +44,7 @@ export function buildFreshness(overrides: Partial<ImportFreshness> = {}): Import
       // render as a <time> with no dateTime.
       hobbydigi: null,
       fookle: null,
+      twinnermodel: null,
     },
     ...overrides,
   };

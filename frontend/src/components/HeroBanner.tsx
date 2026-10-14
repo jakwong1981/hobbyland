@@ -1,7 +1,7 @@
 // frontend/src/components/HeroBanner.tsx
 import { useMemo } from 'react';
-import { SHOP_CODES, type ComparisonRow, type Grade } from '../types';
-import { SHOP_LABEL, SHOP_TONE } from '../shops';
+import type { ComparisonRow, Grade } from '../types';
+import { SHOP_LABEL, SHOP_TONE, DASHBOARD_SHOPS } from '../shops';
 import { summarizeComparisons } from '../utils/comparisonStats';
 import { MobileSuitArt } from './MobileSuitArt';
 import { ShopLogo } from './ShopLogo';
@@ -32,7 +32,7 @@ export function HeroBanner({ rows, grade }: Props) {
         </h2>
         <div className="stat-grid">
           <StatTile label="總 SKU" value={summary.total} tone="stat-total" />
-          {SHOP_CODES.map((shop) => (
+          {DASHBOARD_SHOPS.map((shop) => (
             <StatTile
               key={shop}
               value={summary.cheapestByShop[shop]}

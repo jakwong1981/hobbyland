@@ -1,14 +1,14 @@
 // frontend/src/components/ComparisonTable.tsx
 import type { CSSProperties } from 'react';
 import {
-  SHOP_CODES,
   type ComparisonRow,
   type Offer,
   type ShopCode,
   type SortKey,
   type SortState,
 } from '../types';
-import { SHOP_LABEL, SHOP_TONE } from '../shops';
+import { SHOP_LABEL, SHOP_TONE, DASHBOARD_SHOPS } from '../shops';
+import { seriesLabel } from '../series';
 import { useComparisonSort } from '../hooks/useComparisonSort';
 import { CheaperBadge } from './CheaperBadge';
 import { ProductImage } from './ProductImage';
@@ -80,14 +80,23 @@ function findOffer(row: ComparisonRow, shop: ShopCode): Offer | undefined {
   return row.offers.find((o) => o.shop === shop);
 }
 
+// The verdict rides under the thumbnail instead of owning a column: it is a
+// property of the kit, not a comparable field, and a whole column of one-chip
+// cells cost more width than it carried meaning.
 function TitleCell({ row }: { row: ComparisonRow }) {
   return (
     <td className="title-cell">
       <div className="title-inner">
-        <ProductImage row={row} className="table-thumb" />
+        <div className="thumb-stack">
+          <ProductImage row={row} className="table-thumb" />
+          <CheaperBadge cheapestShop={row.cheapestShop} exclusiveShop={row.exclusiveShop} />
+        </div>
         <div className="product-info">
           <span className="product-title">{row.title}</span>
           <span className="sku">{skuLabel(row.sku)}</span>
+          <span className="series-tag" data-series={row.series ?? 'none'}>
+            {seriesLabel(row.series)}
+          </span>
         </div>
       </div>
     </td>
@@ -114,7 +123,7 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
               onSort={toggleSort}
               className="title-head"
             />
-            {SHOP_CODES.map((shop, index) => (
+            {DASHBOARD_SHOPS.map((shop, index) => (
               <SortableHeader
                 key={shop}
                 label={SHOP_LABEL[shop]}
@@ -126,9 +135,6 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
                 className={`shop-head ${SHOP_TONE[shop]}`}
               />
             ))}
-            <th scope="col" className="verdict-head">
-              判定<span className="th-code">VERDICT</span>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -138,15 +144,9 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
               style={{ '--i': Math.min(index, STAGGER_CAP) } as CSSProperties}
             >
               <TitleCell row={row} />
-              {SHOP_CODES.map((shop) => (
+              {DASHBOARD_SHOPS.map((shop) => (
                 <OfferCell key={shop} offer={findOffer(row, shop)} shop={shop} />
               ))}
-              <td className="badge-cell">
-                <CheaperBadge
-                  cheapestShop={row.cheapestShop}
-                  exclusiveShop={row.exclusiveShop}
-                />
-              </td>
             </tr>
           ))}
         </tbody>

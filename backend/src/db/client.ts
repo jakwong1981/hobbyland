@@ -36,4 +36,10 @@ function migrate(db: DatabaseSync): void {
   if (!columns.some((c) => c.name === 'image_url')) {
     db.exec('ALTER TABLE products ADD COLUMN image_url TEXT');
   }
+  if (!columns.some((c) => c.name === 'series')) {
+    db.exec('ALTER TABLE products ADD COLUMN series TEXT');
+  }
+  // Kept out of 0000_init.sql: there the index would run before the in-place
+  // ALTER above, failing on a database created before the series column.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_products_series ON products(series)');
 }

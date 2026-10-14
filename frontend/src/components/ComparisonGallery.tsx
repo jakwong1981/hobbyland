@@ -1,7 +1,8 @@
 // frontend/src/components/ComparisonGallery.tsx
 import { memo, type CSSProperties } from 'react';
-import { SHOP_CODES, type ComparisonRow, type ShopCode } from '../types';
-import { SHOP_LABEL, SHOP_TONE } from '../shops';
+import type { ComparisonRow, ShopCode } from '../types';
+import { SHOP_LABEL, SHOP_TONE, DASHBOARD_SHOPS } from '../shops';
+import { seriesLabel } from '../series';
 import { CheaperBadge } from './CheaperBadge';
 import { GradeEmblem } from './GradeEmblem';
 import { ProductImage } from './ProductImage';
@@ -41,8 +42,13 @@ const GalleryCard = memo(function GalleryCard({ row, index }: { row: ComparisonR
       <div className="gallery-body">
         <h3 className="product-title">{row.title}</h3>
         <span className="sku">{skuLabel(row.sku)}</span>
+        {row.series !== null && (
+          <span className="series-tag" data-series={row.series}>
+            {seriesLabel(row.series)}
+          </span>
+        )}
         <ul className="gallery-offers">
-          {SHOP_CODES.map((shop) => (
+          {DASHBOARD_SHOPS.map((shop) => (
             <OfferLine key={shop} row={row} shop={shop} />
           ))}
         </ul>

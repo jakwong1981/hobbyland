@@ -15,6 +15,8 @@ function product(overrides: Partial<ProductRow>): ProductRow {
     url: 'https://example.com/p/1',
     stock: null,
     sellType: '現貨',
+    imageUrl: null,
+    series: null,
     importedAt: '2026-10-11T00:00:00.000Z',
     ...overrides,
   };
@@ -33,6 +35,15 @@ describe('buildComparisons', () => {
     expect(row.saving).toBe(22);
     expect(row.exclusiveShop).toBeNull();
     expect(row.offers.map((o) => o.shop)).toEqual(['animes-pro', 'hobbyland']);
+  });
+
+  it('takes any classified series across the group when shops were enriched at different times', () => {
+    const rows = buildComparisons([
+      product({ shopCode: 'hobbyland', price: 140, series: null }),
+      product({ id: 2, shopCode: 'animes-pro', price: 118, series: 'seed_destiny' }),
+    ]);
+
+    expect(rows[0]!.series).toBe('seed_destiny');
   });
 
   it('marks a tie when both shops charge the same price', () => {
@@ -129,5 +140,33 @@ describe('buildComparisons with more than two offers', () => {
 
     expect(rows[0]!.cheapestShop).toBe('tie');
     expect(rows[0]!.exclusiveShop).toBeNull();
+  });
+});
+
+describe('buildComparisons across all five real shops', () => {
+  it('picks twinnermodel when it undercuts the other four', () => {
+    const rows = buildComparisons([
+      product({ id: 1, shopCode: 'hobbyland', price: 140 }),
+      product({ id: 2, shopCode: 'animes-pro', price: 130 }),
+      product({ id: 3, shopCode: 'hobbydigi', price: 125 }),
+      product({ id: 4, shopCode: 'fookle', price: 120 }),
+      product({ id: 5, shopCode: 'twinnermodel', price: 102 }),
+    ]);
+    const row = rows[0]!;
+
+    expect(row.cheapestShop).toBe('twinnermodel');
+    expect(row.saving).toBe(18);
+    expect(row.exclusiveShop).toBeNull();
+    expect(row.offers.map((o) => o.shop)[0]).toBe('twinnermodel');
+  });
+
+  it('flags a twinnermodel-only sku as exclusive', () => {
+    const rows = buildComparisons([
+      product({ id: 1, shopCode: 'twinnermodel', price: 102 }),
+    ]);
+    const row = rows[0]!;
+
+    expect(row.exclusiveShop).toBe('twinnermodel');
+    expect(row.saving).toBeNull();
   });
 });

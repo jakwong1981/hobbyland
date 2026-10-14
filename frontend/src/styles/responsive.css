@@ -54,6 +54,22 @@
     height: 60px;
   }
 
+  /* The verdict chip follows the thumbnail down to phone size. */
+  .thumb-stack {
+    gap: 5px;
+  }
+
+  .thumb-stack .badge {
+    max-width: 68px;
+    padding: 2px 5px;
+    font-size: 0.57rem;
+  }
+
+  .thumb-stack .badge .shop-logo {
+    width: 11px;
+    height: 11px;
+  }
+
   .comparison-table {
     font-size: 0.84rem;
   }

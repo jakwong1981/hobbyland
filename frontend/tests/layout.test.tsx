@@ -33,8 +33,9 @@ describe('HeroBanner', () => {
     const values = [...document.querySelectorAll('.stat-value')].map((n) =>
       n.getAttribute('data-value'),
     );
-    // Tile order: total SKU, one cheapest-win count per shop in SHOP_CODES
-    // (hobbyland, animes-pro, hobbydigi, fookle), then the exclusives total.
+    // Tile order: total SKU, one cheapest-win count per shop in DASHBOARD_SHOPS
+    // (hobbyland, animes-pro, fookle, twinnermodel — hobbydigi is omitted),
+    // then the exclusives total.
     expect(values).toEqual(['2', '1', '0', '0', '0', '1']);
     expect(document.querySelector('.hero-grade')).toHaveTextContent('MG');
   });
@@ -83,8 +84,10 @@ describe('ComparisonGallery', () => {
     expect(screen.getByText('HG Gundam')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'HK$78' })).toHaveAttribute('href', 'https://hl/kit');
     expect(screen.getByText('HK$100')).toBeInTheDocument();
-    // hobbydigi and fookle have no offer for this kit, so each shows a placeholder.
+    // fookle and twinnermodel have no offer for this kit, so each shows a
+    // placeholder; hobbydigi is omitted from the dashboard entirely.
     expect(screen.getAllByText('—')).toHaveLength(2);
+    expect(screen.queryByText('HobbyDigi')).toBeNull();
     expect(document.querySelector('.gallery-offer.winner')).toHaveTextContent('Hobbyland');
     expect(screen.getByText('Hobbyland 最平')).toBeInTheDocument();
   });

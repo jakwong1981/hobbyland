@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS products (
   stock TEXT,
   sell_type TEXT,
   image_url TEXT,
+  series TEXT,
   batch_id INTEGER REFERENCES import_batches(id),
   imported_at TEXT NOT NULL,
   UNIQUE (shop_id, sku, grade)
@@ -38,4 +39,5 @@ INSERT OR IGNORE INTO shops (code, name) VALUES
   ('hobbyland', 'Hobbyland'),
   ('animes-pro', 'Animes-Pro'),
   ('hobbydigi', 'HobbyDigi'),
-  ('fookle', 'Fookle Model');
+  ('fookle', 'Fookle Model'),
+  ('twinnermodel', 'Twinner Model 千里達');

@@ -1,10 +1,10 @@
 // frontend/src/components/ShopFilter.tsx
-import { SHOP_CODES, type ShopFilterValue } from '../types';
-import { SHOP_LABEL } from '../shops';
+import type { ShopFilterValue } from '../types';
+import { SHOP_LABEL, DASHBOARD_SHOPS } from '../shops';
 
 const OPTIONS: Array<{ value: ShopFilterValue; label: string }> = [
   { value: 'all', label: '全部' },
-  ...SHOP_CODES.map((shop) => ({ value: shop, label: SHOP_LABEL[shop] })),
+  ...DASHBOARD_SHOPS.map((shop) => ({ value: shop, label: SHOP_LABEL[shop] })),
 ];
 
 interface Props {

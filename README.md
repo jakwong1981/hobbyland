@@ -4,12 +4,12 @@ A self-hosted dashboard that answers one question: **for a given Bandai Gunpla k
 Hong Kong hobby shops is cheapest — and does only one of them actually stock it?**
 
 It ingests scraper output from [Hobbyland E-Shop](https://www.hobbylandeshop.com),
-[Animes-Pro](https://animes-pro.com), [HobbyDigi](https://www.hobbydigi.com) and
-[Fookle Model](https://fooklemodel.com), matches listings across the shops by JAN barcode, and
-renders a per-SKU verdict.
+[Animes-Pro](https://animes-pro.com), [HobbyDigi](https://www.hobbydigi.com),
+[Fookle Model](https://fooklemodel.com) and [Twinner Model 千里達](https://twinnermodel.com),
+matches listings across the shops by JAN barcode, and renders a per-SKU verdict.
 
 ```
-1540 products · 1110 comparison groups · HG 672 / MG 337 / RG 101   (as of 2026-10-13)
+1823 products · 1156 comparison groups · HG 714 / MG 339 / RG 103   (as of 2026-10-14)
 ```
 
 ---
@@ -17,8 +17,8 @@ renders a per-SKU verdict.
 ## 1. Purpose
 
 The shops sell overlapping Bandai catalogue, but they price independently, run different
-promotions, and — critically — **carry different subsets of the catalogue**. Of the 1110 matched
-`(grade, sku)` groups, 280 are sold by more than one shop; **830 are exclusive to one**.
+promotions, and — critically — **carry different subsets of the catalogue**. Of the 1156 matched
+`(grade, sku)` groups, 353 are sold by more than one shop; **803 are exclusive to one**.
 
 That distribution drives the central design constraint: a naive "cheapest shop" badge is wrong more
 often than it is right, because a lone offer cannot win a price comparison. Saying「Animes 最平」
@@ -37,6 +37,13 @@ different claim. The verdict model is therefore explicit about which situation i
 > barcode is inherited from the trusted catalogue by a matcher extended to score romanised kit words
 > and ignore part numbers; a kit that matches nothing is stored under a provisional `FM:<slug>` key
 > and surfaces as Fookle-only rather than guessed. See [Fookle matching](#fookle-matching).
+
+> **Twinner Model is the easy one — its product handles *are* the JANs.** The Shopify shop
+> rate-limits every plain-HTTP client to death, but a warmed headless browser can read
+> `/collections/<handle>/products.json`, whose `handle` is the 13-digit barcode for essentially
+> every kit, with vendor, availability and base-currency (HKD) prices included. All 274 kits in the
+> first live run resolved their JAN from the handle alone. See
+> [Twinner Model matching](#twinner-model-matching).
 
 Secondary goals:
 
@@ -205,7 +212,7 @@ on row insertion order.
 ### 4.3 Data model
 
 ```
-shops(id, code UNIQUE, name)                        -- seeded: hobbyland, animes-pro, hobbydigi, fookle
+shops(id, code UNIQUE, name)                        -- seeded: hobbyland, animes-pro, hobbydigi, fookle, twinnermodel
 import_batches(id, source_file, shop_code, grade,
                row_count, skipped_count, imported_at)
 products(id, shop_id FK, sku, grade, title, price,
@@ -319,12 +326,14 @@ flowchart LR
     CRON["cron 06:00"] --> SC["hobbyland_scraper.py"]
     SC -->|"HTTP API"| HL["Hobbyland Vue SPA backend"]
     SC -->|"Playwright + Chromium"| AP["Animes-Pro (Shopify)"]
-    SC -->|"Playwright, fresh context per page"| HD["HobbyDigi (Magento + Cloudflare)"]
+    SC -->|"Playwright, headed, fresh context per page"| HD["HobbyDigi (Magento + Cloudflare)"]
     SC -->|"WooCommerce Store API"| FM["Fookle Model (WooCommerce)"]
-    HL --> CSV[("up to 12 CSV files")]
+    SC -->|"Playwright warm-up, then in-page products.json fetch"| TM["Twinner Model (Shopify)"]
+    HL --> CSV[("up to 15 CSV files")]
     AP --> CSV
     HD --> CSV
     FM --> CSV
+    TM --> CSV
     CSV -->|"pnpm import:csv"| DB[("SQLite")]
     DB --> UI["Dashboard :8080"]
 ```
@@ -344,6 +353,10 @@ The scraper lives in this repository at `scripts/hobbyland_scraper.py` and runs 
   (`/wp-json/wc/store/v1/products`), so it needs no browser and clears no bot challenge: the grade is
   fixed by the category id (`hg`=27, `mg`=35, `rg`=32), prices are integer minor units, and it
   publishes no JAN. See [Fookle matching](#fookle-matching).
+- **Twinner Model** is Shopify behind the same cold-client rate limit as Animes-Pro, but with no
+  interactive challenge: one warmed Playwright page unlocks same-origin `products.json` fetches,
+  which carry the JAN as the handle, the vendor, per-variant availability and HKD prices — no DOM
+  parsing at all. See [Twinner Model matching](#twinner-model-matching).
 
 CSV contract (UTF-8 BOM):
 
@@ -375,6 +388,7 @@ pnpm scrape                                  # host mode, all categories
 scripts/scrape-and-import.sh rg hg           # selected categories only
 scripts/scrape-and-import.sh hd              # hobbydigi (needs DEEPSEEK_API_KEY)
 scripts/scrape-and-import.sh fm              # fooklemodel (needs data/hobbyland.db, no API key)
+scripts/scrape-and-import.sh tm              # twinnermodel (needs data/hobbyland.db + Playwright)
 scripts/scrape-and-import.sh --docker        # import into the running container
 ```
 
@@ -383,10 +397,37 @@ scripts/scrape-and-import.sh --docker        # import into the running container
 HobbyDigi is the reason this project has a human-in-the-loop step, and the numbers behind that
 decision are worth recording because each was measured rather than assumed.
 
-**The crawl is solved.** Cloudflare budgets roughly two or three requests per cookie jar, and the
-budget does *not* recover with time (retested at +60 s and +120 s, still 403). A **fresh browser
-context per page** gets a fresh budget: 28 pages / 784 cards with zero blocks, where a single reused
-context died on page 3. Same-origin `fetch()` from an already-cleared page also works.
+**The crawl is a running fight, not a solved problem.** Cloudflare budgets roughly two or three
+requests per cookie jar, and the budget does *not* recover with time (retested at +60 s and +120 s,
+still 403). A **fresh browser context per page** gets a fresh budget: 28 pages / 784 cards with zero
+blocks, where a single reused context died on page 3. Same-origin `fetch()` from an already-cleared
+page also works.
+
+What Cloudflare serves once that budget is spent is a **passive managed challenge**, and it cannot be
+clicked away. The Turnstile iframe is injected into a shadow root, so no selector query on the page
+can see it — only `page.frames` finds it — and the 300×65 widget it renders contains **no tick box at
+all** (`input[type=checkbox]`, `label.cb-lb` and `div[role=checkbox]` all absent). Measured:
+
+- a *ghost click* — CDP `Input.dispatchMouseEvent`, the only click Cloudflare scores, because events
+  synthesised from page scripts are `isTrusted: false` — locates the widget and fires, and the
+  interstitial still does not clear;
+- a **headed** Chromium then waited 60 s and finished with **zero cookies, no `cf_clearance`**: once
+  the IP is flagged, not even a real window passes;
+- the same headed code, on an *unflagged* IP and one reused jar, made **24 sequential loads with zero
+  challenges**.
+
+So the scraper aims at never getting flagged, and at never wasting a clearance it did earn:
+
+| measure | where |
+|---|---|
+| headed browser for this shop only (`HD_HEADLESS=1` forces headless on a display-less host) | `_hobbydigi_page_isolated` |
+| `--disable-blink-features=AutomationControlled`, so `navigator.webdriver` stays unset | `HD_BROWSER_ARGS` |
+| 6 s between listing pages instead of the shared 1.5 s | `HD_PAGE_WAIT_S` |
+| a jar that really cleared (carries `cf_clearance`) is saved to `data/hobbydigi_state.json` and replayed into every later browser and every later run — one tick keeps paying off | `_hobbydigi_save_state` / `_hobbydigi_state_path` |
+| ghost click at the widget (`HD_CLICK_ATTEMPTS = 3`); if still challenged after 3 attempts, immediately raises `RuntimeError` and falls back to `data/hobbydigi_cards.json` | `_hobbydigi_solve_challenge` / `_hobbydigi_page` / `_hobbydigi_crawl` |
+
+`data/hobbydigi_state.json` is a session credential bound to this IP and user agent: `data/` is
+gitignored and must stay that way.
 
 **The identity problem is not.** Only ~6% of listings carry a JAN as the Magento URL key.
 `/graphql` 404s, `/rest/V1/products` 403s, product detail pages never clear the challenge, and the
@@ -485,6 +526,36 @@ excluded from the catalogue (`exclude_shops=('fookle', 'hobbydigi')`) so a wrong
 confirm itself on the next run, and the backend treats an `FM:` key as provisional — a later import
 that resolves the kit to a real JAN replaces it by URL instead of leaving a duplicate.
 
+### Twinner Model matching
+
+Twinner Model (千里達, `twinnermodel.com`) is the fifth shop — Shopify, like Animes-Pro, but the
+opposite experience: the data endpoint is rich and the protection is shallow.
+
+**Every cold client is rate-limited.** A single `urllib`/`curl` request — even with a browser UA —
+answers `429 local_rate_limited` on both the collection HTML and `/products.json`. But a headless
+Chromium renders the listing with **no interactive challenge** (unlike Animes-Pro's
+`__shopify_bv_challenge` and HobbyDigi's Cloudflare fight), and once the session is warm,
+same-origin `fetch('/collections/<handle>/products.json?limit=250&page=N')` from inside the page
+answers normally. The scraper therefore opens one collection page with Playwright (`tm` category)
+and pages the JSON endpoint from that context — structured data, zero DOM selectors.
+
+**Identity comes free.** The `handle` of essentially every product *is* its 13-digit JAN
+(`/products/4573102650962`), validated through the same EAN-13 check-digit gate as every other
+source. The fallbacks are the standard order of trust — a JAN in the title, then the trusted
+catalogue (`exclude_shops=('twinnermodel', 'fookle', 'hobbydigi')` so derived rows never confirm
+themselves), and a kit that matches nothing is stored under a provisional **`TM:<slug>`** key.
+The first live run resolved **274/274 JANs from the handle alone**.
+
+**Facets are applied client-side.** `products.json` ignores the listing URL's filter parameters, so
+the scraper reproduces them: `vendor == "Bandai"` (the `filter.p.vendor=Bandai` facet),
+`variants[].available` (the `filter.v.availability=1` facet), and the shared decal/tool skip regex.
+Grade is fixed by the collection handle (`high-grade`/`master-grade`/`real-grade` → hg/mg/rg).
+
+**Prices are HKD.** The storefront renders TWD at the visitor's exchange rate
+(`Shopify.currency.active = 'TWD'`, rate ≈ 4.18), but `products.json` returns the shop's base
+currency — verified against hobbyland's HKD price for the same JAN — so the CSV prices are directly
+comparable with the other four shops with no conversion step.
+
 ---
 
 ## 7. Configuration
@@ -496,7 +567,8 @@ that resolves the kit to a real JAN replaces it by URL instead of leaving a dupl
 | `NODE_ENV` | `development` | Express mode |
 | `CSV_DIR` | *(none)* | Default `--dir` for the import CLI |
 | `LOG_LEVEL` | `info` | pino level |
-| `DEEPSEEK_API_KEY` | *(none)* | Scraper-only: classifies grade for the `hd` (hobbydigi.com) category and powers `review_matches.py`. The backend never reads it. |
+| `DEEPSEEK_API_KEY` | *(none)* | Scripts-only: classifies grade for the `hd` (hobbydigi.com) category, powers `review_matches.py`, and backs the DeepSeek fallback engine of `scripts/jev_series.py`. The backend never reads it. |
+| `JEV_API_KEY` | *(none)* | Script-only: an OpenRouter API key — `scripts/jev_series.py` classifies a kit's Gundam series via the Jev decision model on OpenRouter (`POST /api/alpha/decisions`, model `~typesafe/jev-latest`), falling back to DeepSeek when Jev cannot answer. The backend never reads it. |
 
 Copy `.env.example` to `.env` and adjust. SQLite is embedded, so there is no connection pool to
 tune. `createDatabase()` sets `PRAGMA journal_mode = WAL` (reads continue during an import) and

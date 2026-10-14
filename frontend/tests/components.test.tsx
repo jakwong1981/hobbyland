@@ -37,6 +37,17 @@ describe('CheaperBadge', () => {
     expect(screen.getByText('只有 Hobbyland 有貨')).toBeInTheDocument();
   });
 
+  it('labels a twinnermodel price win with the twinnermodel name', () => {
+    render(<CheaperBadge cheapestShop="twinnermodel" exclusiveShop={null} />);
+    expect(screen.getByText('Twinnermodel 最平')).toBeInTheDocument();
+  });
+
+  it('labels a twinnermodel-exclusive SKU with the twinnermodel name', () => {
+    render(<CheaperBadge cheapestShop="twinnermodel" exclusiveShop="twinnermodel" />);
+    expect(screen.getByText('只有 Twinnermodel 有貨')).toBeInTheDocument();
+    expect(screen.queryByText(/最平/)).not.toBeInTheDocument();
+  });
+
   it('shows a dash when there is no cheapest shop', () => {
     render(<CheaperBadge cheapestShop={null} exclusiveShop={null} />);
     expect(screen.getByText('—')).toBeInTheDocument();
@@ -134,10 +145,12 @@ describe('FreshnessBar', () => {
     expect(times[1]).toHaveAttribute('dateTime', '2026-10-11T11:47:00.000Z');
     expect(screen.getByText('Hobbyland')).toBeInTheDocument();
     expect(screen.getByText('Animes-Pro')).toBeInTheDocument();
-    // Shops that have never been imported are still listed, each marked 冇紀錄.
-    expect(screen.getByText('HobbyDigi')).toBeInTheDocument();
+    // Shops that have never been imported are still listed, each marked 冇紀錄
+    // (fookle and twinnermodel here).
     expect(screen.getByText('Fookle Model')).toBeInTheDocument();
     expect(screen.getAllByText('冇紀錄')).toHaveLength(2);
+    // HobbyDigi is omitted from the dashboard.
+    expect(screen.queryByText('HobbyDigi')).toBeNull();
   });
 
   it('marks a shop that has never been imported for this grade', () => {
@@ -145,7 +158,7 @@ describe('FreshnessBar', () => {
       <FreshnessBar
         freshness={buildFreshness({
           overall: '2026-10-11T11:46:00.000Z',
-          byShop: { hobbyland: '2026-10-11T11:46:00.000Z', 'animes-pro': null, hobbydigi: null, fookle: null },
+          byShop: { hobbyland: '2026-10-11T11:46:00.000Z', 'animes-pro': null, hobbydigi: null, fookle: null, twinnermodel: null },
         })}
         isLoading={false}
       />,
@@ -160,7 +173,7 @@ describe('FreshnessBar', () => {
       <FreshnessBar
         freshness={buildFreshness({
           overall: null,
-          byShop: { hobbyland: null, 'animes-pro': null, hobbydigi: null, fookle: null },
+          byShop: { hobbyland: null, 'animes-pro': null, hobbydigi: null, fookle: null, twinnermodel: null },
         })}
         isLoading={false}
       />,

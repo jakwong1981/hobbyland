@@ -7,7 +7,8 @@ import { ComparisonTable } from '../src/components/ComparisonTable';
 import { ShopFilter } from '../src/components/ShopFilter';
 import { DashboardPage } from '../src/pages/DashboardPage';
 import { useComparisonSort } from '../src/hooks/useComparisonSort';
-import { SHOP_CODES, type ComparisonRow } from '../src/types';
+import type { ComparisonRow } from '../src/types';
+import { DASHBOARD_SHOPS } from '../src/shops';
 import { buildOffer, buildRow, stubApi } from './fixtures';
 
 // Alpha is sold by both shops; Beta is hobbyland-only; Gamma is animes-only.
@@ -106,19 +107,28 @@ describe('useComparisonSort', () => {
 });
 
 describe('ComparisonTable sorting', () => {
-  it('marks the sortable headers unsorted and leaves the verdict header alone', () => {
+  it('marks the sortable headers unsorted and has no verdict column', () => {
     render(<ComparisonTable rows={ROWS} />);
 
-    for (const name of ['產品', 'Hobbyland', 'Animes-Pro', 'HobbyDigi']) {
+    for (const name of ['產品', 'Hobbyland', 'Animes-Pro']) {
       expect(screen.getByRole('columnheader', { name: new RegExp(name) })).toHaveAttribute(
         'aria-sort',
         'none',
       );
     }
 
-    const verdict = screen.getByRole('columnheader', { name: /判定/ });
-    expect(verdict).not.toHaveAttribute('aria-sort');
-    expect(verdict.querySelector('button')).toBeNull();
+    // HobbyDigi is omitted from the dashboard.
+    expect(screen.queryByRole('columnheader', { name: /HobbyDigi/ })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: /判定/ })).toBeNull();
+  });
+
+  it('renders the verdict under the thumbnail instead of in its own column', () => {
+    render(<ComparisonTable rows={[ALPHA]} />);
+
+    const stack = document.querySelector('.title-cell .thumb-stack');
+    expect(stack).not.toBeNull();
+    expect(stack?.querySelector('.product-thumb')).not.toBeNull();
+    expect(stack?.querySelector('.badge')?.textContent).toContain('Animes 最平');
   });
 
   it('reorders rows and reports aria-sort when the title header is clicked', async () => {
@@ -143,11 +153,12 @@ describe('ComparisonTable sorting', () => {
 });
 
 describe('ShopFilter', () => {
-  it('defaults to all and lists every shop', () => {
+  it('defaults to all and lists every dashboard shop', () => {
     render(<ShopFilter value="all" onChange={() => undefined} />);
     expect(shopSelect()).toHaveValue('all');
-    // "all" plus one option per entry in SHOP_CODES.
-    expect(screen.getAllByRole('option')).toHaveLength(SHOP_CODES.length + 1);
+    // "all" plus one option per entry in DASHBOARD_SHOPS.
+    expect(screen.getAllByRole('option')).toHaveLength(DASHBOARD_SHOPS.length + 1);
+    expect(screen.queryByRole('option', { name: 'HobbyDigi' })).toBeNull();
   });
 
   it('emits the chosen shop', async () => {

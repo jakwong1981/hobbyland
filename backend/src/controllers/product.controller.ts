@@ -18,6 +18,7 @@ const comparisonQuerySchema = z.object({
   grade: z.enum(GRADES).optional(),
   q: z.string().trim().max(200).optional(),
   cheaper: z.enum(SHOP_CODES).optional(),
+  series: z.string().trim().max(64).optional(),
 });
 
 const freshnessQuerySchema = z.object({
@@ -28,6 +29,7 @@ const productQuerySchema = z.object({
   shop: z.enum(SHOP_CODES).optional(),
   grade: z.enum(GRADES).optional(),
   q: z.string().trim().max(200).optional(),
+  series: z.string().trim().max(64).optional(),
 });
 
 function ok<T>(res: Response, data: T): void {
@@ -48,6 +50,7 @@ export class ProductController {
     const filters = {
       ...(query.grade ? { grade: query.grade } : {}),
       ...(query.q ? { q: query.q } : {}),
+      ...(query.series ? { series: query.series } : {}),
     };
     const products = this.repo.findProducts(filters);
     let rows = buildComparisons(products);
@@ -63,6 +66,7 @@ export class ProductController {
       ...(query.shop ? { shop: query.shop } : {}),
       ...(query.grade ? { grade: query.grade } : {}),
       ...(query.q ? { q: query.q } : {}),
+      ...(query.series ? { series: query.series } : {}),
     };
     ok<ProductRow[]>(res, this.repo.findProducts(filters));
   };

@@ -20,20 +20,20 @@ describe('summarizeComparisons', () => {
 
     expect(summary).toEqual({
       total: 6,
-      cheapestByShop: { hobbyland: 2, 'animes-pro': 1, hobbydigi: 0, fookle: 0 },
+      cheapestByShop: { hobbyland: 2, 'animes-pro': 1, hobbydigi: 0, fookle: 0, twinnermodel: 0 },
       ties: 1,
       exclusives: 1,
-      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 1, fookle: 0 },
+      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 1, fookle: 0, twinnermodel: 0 },
     });
   });
 
   it('returns zeroes for no rows', () => {
     expect(summarizeComparisons([])).toEqual({
       total: 0,
-      cheapestByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0, fookle: 0 },
+      cheapestByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0, fookle: 0, twinnermodel: 0 },
       ties: 0,
       exclusives: 0,
-      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0, fookle: 0 },
+      exclusivesByShop: { hobbyland: 0, 'animes-pro': 0, hobbydigi: 0, fookle: 0, twinnermodel: 0 },
     });
   });
 

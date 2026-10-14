@@ -1,6 +1,6 @@
 // frontend/src/types/index.ts
 // Mirrors backend/src/types/index.ts by hand — there is no shared package.
-export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi', 'fookle'] as const;
+export const SHOP_CODES = ['hobbyland', 'animes-pro', 'hobbydigi', 'fookle', 'twinnermodel'] as const;
 export type ShopCode = (typeof SHOP_CODES)[number];
 
 export const GRADES = ['hg', 'mg', 'rg'] as const;
@@ -11,6 +11,7 @@ export type Faction = 'federation' | 'zeon';
 export type DashboardView = 'table' | 'gallery';
 
 export type ShopFilterValue = ShopCode | 'all';
+export type SeriesFilterValue = string | 'all';
 export type SortKey = 'title' | ShopCode;
 export type SortDirection = 'asc' | 'desc';
 
@@ -33,6 +34,7 @@ export interface ComparisonRow {
   sku: string;
   grade: Grade;
   title: string;
+  series: string | null;
   offers: Offer[];
   cheapestShop: CheapestShop;
   saving: number | null;

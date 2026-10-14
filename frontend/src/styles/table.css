@@ -148,6 +148,30 @@ th[aria-sort="descending"] .sort-indicator {
   gap: 12px;
 }
 
+.title-cell .thumb-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+/* The verdict chip has only the thumbnail's width to live in, so it wraps
+   instead of stretching the product column. */
+.thumb-stack .badge {
+  max-width: 122px;
+  padding: 3px 7px;
+  font-size: 0.64rem;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+}
+
+.thumb-stack .badge .shop-logo {
+  width: 13px;
+  height: 13px;
+}
+
 .product-thumb {
   flex-shrink: 0;
   object-fit: cover;
@@ -249,7 +273,7 @@ th[aria-sort="descending"] .sort-indicator {
   color: var(--text-dim);
 }
 
-/* ---------- verdict badge ---------- */
+/* ---------- verdict badge (rendered under the table thumbnail) ---------- */
 
 .badge {
   position: relative;
@@ -308,4 +332,8 @@ th[aria-sort="descending"] .sort-indicator {
   border-color: var(--border);
   background: var(--surface-2);
   color: var(--text-muted);
+}
+
+.title-cell .series-tag {
+  margin-top: 6px;
 }

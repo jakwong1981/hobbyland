@@ -21,6 +21,7 @@ interface ProductQueryRow {
   stock: string | null;
   sell_type: string | null;
   image_url: string | null;
+  series: string | null;
   imported_at: string;
 }
 
@@ -56,12 +57,12 @@ export class ProductRepository {
   }
 
   upsertProduct(shopId: number, grade: Grade, record: CsvProductRecord, batchId: number): void {
-    // A CSV predating the image_url column parses to null; COALESCE keeps the stored
-    // thumbnail instead of letting a stale re-import wipe it.
+    // A CSV predating the image_url/series columns parses to null; COALESCE keeps
+    // the stored value instead of letting a stale re-import wipe it.
     this.db
       .prepare(
-        `INSERT INTO products (shop_id, sku, grade, title, price, regular_price, url, stock, sell_type, image_url, batch_id, imported_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO products (shop_id, sku, grade, title, price, regular_price, url, stock, sell_type, image_url, series, batch_id, imported_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (shop_id, sku, grade) DO UPDATE SET
            title = excluded.title,
            price = excluded.price,
@@ -70,6 +71,7 @@ export class ProductRepository {
            stock = excluded.stock,
            sell_type = excluded.sell_type,
            image_url = COALESCE(excluded.image_url, products.image_url),
+           series = COALESCE(excluded.series, products.series),
            batch_id = excluded.batch_id,
            imported_at = excluded.imported_at`,
       )
@@ -84,14 +86,16 @@ export class ProductRepository {
         record.stock,
         record.sellType,
         record.imageUrl,
+        record.series,
         batchId,
         new Date().toISOString(),
       );
   }
 
   deleteProvisionalByUrl(shopId: number, grade: Grade, url: string): void {
-    // A provisional key is `<PREFIX>:<slug>` (HD: hobbydigi, FM: fookle) — the
-    // only sku that carries a colon, since a real JAN is 13 digits. Deleting by
+    // A provisional key is `<PREFIX>:<slug>` (HD: hobbydigi, FM: fookle,
+    // TM: twinnermodel) — the only sku shape that carries a colon, since a real
+    // JAN is 13 digits. Deleting by
     // that marker replaces a stale provisional row for this URL whatever prefix
     // it used, so a kit that later resolves a JAN leaves no duplicate behind.
     this.db
@@ -99,7 +103,7 @@ export class ProductRepository {
       .run(shopId, grade, url);
   }
 
-  findProducts(filters: { shop?: ShopCode; grade?: Grade; q?: string }): ProductRow[] {
+  findProducts(filters: { shop?: ShopCode; grade?: Grade; q?: string; series?: string }): ProductRow[] {
     const conditions: string[] = [];
     const params: string[] = [];
     if (filters.shop) {
@@ -110,6 +114,10 @@ export class ProductRepository {
       conditions.push('p.grade = ?');
       params.push(filters.grade);
     }
+    if (filters.series) {
+      conditions.push('p.series = ?');
+      params.push(filters.series);
+    }
     if (filters.q) {
       conditions.push('(p.title LIKE ? OR p.sku LIKE ?)');
       params.push(`%${filters.q}%`, `%${filters.q}%`);
@@ -118,7 +126,7 @@ export class ProductRepository {
     const rows = this.db
       .prepare(
         `SELECT p.id, s.code AS shop_code, p.sku, p.grade, p.title, p.price, p.regular_price,
-                p.url, p.stock, p.sell_type, p.image_url, p.imported_at
+                p.url, p.stock, p.sell_type, p.image_url, p.series, p.imported_at
          FROM products p JOIN shops s ON s.id = p.shop_id
          ${where}
          ORDER BY p.sku`,
@@ -184,6 +192,7 @@ function mapProductRow(r: ProductQueryRow): ProductRow {
     stock: r.stock,
     sellType: r.sell_type,
     imageUrl: r.image_url,
+    series: r.series,
     importedAt: r.imported_at,
   };
 }

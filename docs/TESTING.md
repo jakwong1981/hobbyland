@@ -13,7 +13,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 
 ## 1. Unit Test Suites
 
-### comparison.service.test.ts (10 tests)
+### comparison.service.test.ts (13 tests)
 
 | # | Case | Asserts |
 |---|---|---|
@@ -27,11 +27,14 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 8 | Three offers, distinct prices | offers sorted asc, cheapest wins, `saving` = gap to the **runner-up** |
 | 9 | Three offers, two level at the bottom | `cheapestShop = 'tie'` even though a dearer third offer exists |
 | 10 | Three level offers | `cheapestShop = 'tie'`, `exclusiveShop = null` |
+| 11 | Group series | `series` = first non-null across the group (shops enriched at different times) |
+| 12 | Five real shops, twinnermodel cheapest | `cheapestShop = 'twinnermodel'`, `saving` = gap to the runner-up, its offer sorts first |
+| 13 | Twinnermodel-only SKU | `exclusiveShop = 'twinnermodel'`, `saving = null` |
 
 > Cases 8-10 cast a third shop code that `ShopCode` does not declare. They pin the
 > N-way arithmetic without adding a shop that has no data source behind it.
 
-### import.service.test.ts (16 tests)
+### import.service.test.ts (20 tests)
 
 | # | Case | Asserts |
 |---|---|---|
@@ -50,7 +53,11 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 13 | `buildFreshness`, a shop outside `SHOP_CODES` | its timestamp still counts towards `overall` — `mapProductRow` casts `shop_code` unchecked, so this reaches the service at runtime |
 | 14 | Provisional `HD:` row, then a real JAN for the same URL | the provisional row is replaced — one row left, keyed by the JAN |
 | 15 | Provisional `FM:` row (fookle), then a real JAN for the same URL | fookle analogue of case 14 — `deleteProvisionalByUrl` matches any `<PREFIX>:` key, not only `HD:` |
+| 15b | Provisional `TM:` row (twinnermodel), then a real JAN for the same URL | twinnermodel analogue of case 14 — the provisional row is replaced, one row left keyed by the JAN |
 | 16 | Provisional `HD:` row re-imported unchanged | still one row — a provisional sku never triggers its own deletion |
+| 17 | CSV with `series` | column mapped through to the stored product |
+| 18 | Stale re-import without `series` over a classified row | stored `series` **preserved** via COALESCE, price still updated |
+| 19 | `findProducts({ series })` | only rows of that series returned |
 
 ### api.test.ts (12 tests, supertest + in-memory DB)
 
@@ -69,17 +76,19 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 10 | GET /api/imports/freshness | no `grade` | 200, `grade = null`, `overall` non-null |
 | 11 | GET /api/imports/freshness | `grade=pg` (invalid) | 400 + traceId |
 
-### Frontend (`frontend/tests/`, 68 tests)
+### Frontend (`frontend/tests/`, 87 tests)
 
 | File | Cases |
 |---|---|
-| components.test.tsx (21) | `CheaperBadge` (cheapest shop named without the saving amount, tie, single-shop →「只有 Animes 有貨」and never「最平」, hobbyland-exclusive, exclusive outranks a tie verdict, none); `ComparisonTable` (empty state, both prices + badge, missing-shop placeholder + exclusive label, regular price only when higher, pre-order flag, preview image rendered, grade placeholder when no image, `onError` → placeholder); `FreshnessBar` (a `dateTime` per imported shop with the never-imported shops marked「冇紀錄」, no history at all, loading vs. failed); `GradeTabs` (selected state, emits grade); `SearchBar` (emits text) |
-| dashboard.test.tsx (8) | api client (unwrap data, `ApiError` on failure, query-string building); `DashboardPage` (default HG load, refetch on grade change, freshness requested grade-scoped, **both timestamps rendered on the page**, error message + freshness failure state) |
+| components.test.tsx (23) | `CheaperBadge` (cheapest shop named without the saving amount, tie, single-shop →「只有 Animes 有貨」and never「最平」, hobbyland-exclusive, exclusive outranks a tie verdict, **twinnermodel price win →「Twinnermodel 最平」, twinnermodel exclusive →「只有 Twinnermodel 有貨」**, none); `ComparisonTable` (empty state, both prices + badge, missing-shop placeholder + exclusive label, regular price only when higher, pre-order flag, preview image rendered, grade placeholder when no image, `onError` → placeholder); `FreshnessBar` (a `dateTime` per imported shop with the never-imported shops marked「冇紀錄」, no history at all, loading vs. failed); `GradeTabs` (selected state, emits grade); `SearchBar` (emits text) |
+| dashboard.test.tsx (9) | api client (unwrap data, `ApiError` on failure, query-string building); `DashboardPage` (default HG load, refetch on grade change, freshness requested grade-scoped, **both timestamps rendered on the page**, error message + freshness failure state) |
 | faction.test.tsx (6) | `FactionToggle` (active faction `aria-checked`, emits clicked faction); `useFaction` (federation default + `<html data-faction>`, persist & restore across mounts, unknown stored value → federation); `App` (header toggle flips the document faction) |
 | comparison-stats.test.ts (8) | `summarizeComparisons` (per-shop wins, ties, exclusives counted apart, empty input, a fookle win + fookle exclusive); `productImageUrl` (SHOP_CODES preference, null without photo); `selectShowcaseKits` (photo-only, biggest saving first, links lowest offer, cap) |
 | count-up.test.tsx (4) | `useCountUp` (reduced motion → target immediately with no frame scheduled, tween 0 → target, continues from shown value on target change, cancels frame on unmount) — rAF and `matchMedia` stubbed |
-| layout.test.tsx (9) | `HeroBanner` (stat targets, both faction heads rendered); `KitShowcase` (nothing without photos, link to cheapest offer + `aria-hidden` clone, failed photo drops kit); `ComparisonGallery` (empty state, per-shop prices + winner + verdict); `FactionWipe` (hidden on first render, plays after switch); `DashboardPage` (表格 ↔ 圖鑑 toggle) |
-| sort-filter.test.tsx (12) | `useComparisonSort` (incoming order kept while unsorted, title asc/desc, per-shop price asc/desc with the non-carrying shop always last, input array not mutated); `ComparisonTable` (three sortable headers start `aria-sort="none"`, verdict header has no button, click reorders rows + flips `aria-sort`, price header reorders); `ShopFilter` (defaults to `all`, listing every shop plus 全部, emits choice); `DashboardPage` (all-by-default count, filtered `M / N` count with the other shop's rows hidden, filter-specific empty state) |
+| layout.test.tsx (9) | `HeroBanner` (stat targets — one tile per DASHBOARD_SHOPS entry incl. twinnermodel, both faction heads rendered); `KitShowcase` (nothing without photos, link to cheapest offer + `aria-hidden` clone, failed photo drops kit); `ComparisonGallery` (empty state, per-shop prices + winner + verdict, placeholders for both shops without an offer); `FactionWipe` (hidden on first render, plays after switch); `DashboardPage` (表格 ↔ 圖鑑 toggle) |
+| sort-filter.test.tsx (13) | `useComparisonSort` (incoming order kept while unsorted, title asc/desc, per-shop price asc/desc with the non-carrying shop always last, input array not mutated); `ComparisonTable` (three sortable headers start `aria-sort="none"`, no 判定 column any more, the verdict badge renders under the thumbnail inside the 產品 cell, click reorders rows + flips `aria-sort`, price header reorders); `ShopFilter` (defaults to `all`, listing every shop plus 全部, emits choice); `DashboardPage` (all-by-default count, filtered `M / N` count with the other shop's rows hidden, filter-specific empty state) |
+| series-stats.test.ts (5) | `countBySeries` (counts per series sorted desc, unclassified rows excluded, empty when nothing classified); `seriesLabel` (known ids → 中文名, unmapped id passes through, null → `—`) |
+| series-filter.test.tsx (5) | `SeriesFilter` (only series present in rows, with counts, plus 未分類); `DashboardPage` (series select narrows the table + `M / N` count, `__none__` filters to unclassified, stat chip toggles the series filter, table column shows the series name / `—`) |
 
 `fetch` is stubbed per test; `QueryClient` retries are disabled. `tests/fixtures.ts` exports
 `stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
@@ -87,7 +96,7 @@ queries, so a single-payload stub would answer the freshness request with a comp
 
 `tests/setup.ts` also installs a `window.matchMedia` stub (jsdom has none) returning `matches: false`.
 
-Current status: **backend 38/38, frontend 68/68 passing**; Python `scripts/test_*.py` 93/93; `pnpm build` clean under strict TS.
+Current status: **backend 45/45, frontend 87/87 passing**; Python `scripts/test_*.py` 200/200 (incl. `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 49: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**); `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
@@ -117,12 +126,40 @@ Current status: **backend 38/38, frontend 68/68 passing**; Python `scripts/test_
 | IT-19 | Freshness for an unscraped grade | only HG imported | `GET /api/imports/freshness?grade=rg` | 200, `overall = null`, all shops `null` | readout shows「呢個級別未有匯入紀錄」rather than an HG timestamp |
 | IT-20 | Third price column renders | IT-01 done, :8080 serving | inspect the HG grid | HobbyDigi column present with its own neutral tone **and** a left divider | built CSS contains `--shop-c`, `.shop-head.shop-c`, `.price-cell.shop-c .price-link`, and the divider rule keys off `td.price-cell` / `th.shop-head` rather than `nth-child` |
 | IT-20b | Fourth price column renders | IT-01 done, :8080 serving | inspect the HG grid | Fookle column present with its own neutral tone **and** a left divider | built CSS contains `--shop-d`, `.shop-head.shop-d`, `.price-cell.shop-d .price-link` |
+| IT-20c | Fifth price column renders | IT-01 done, :8080 serving | inspect the HG grid | Twinner Model column present with its own neutral tone | built CSS contains `--shop-e`, `.shop-head.shop-e`, `.price-cell.shop-e .price-link` |
 | IT-21 | HobbyDigi variant guard | `hd` scrape done | inspect the resolution report | `variants quashed ≥ 0`; no duplicate `(grade, sku)` inside any `hobbydigi_*.csv` | two differently-titled cards resolving to one barcode are both blanked, so the `UNIQUE (shop_id, sku, grade)` upsert cannot silently swallow one |
 | IT-22 | No circular matching | hobbydigi rows already imported | re-run `hd` | the report's `catalogue size` excludes hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('hobbydigi',))` |
 | IT-22b | Fookle cross-script match + no circular matching | `fm` scrape done, catalogue from hobbyland/animes-pro | run `hobbyland_scraper.py fm` | some English fookle titles inherit a real JAN via the Latin/part-number matcher; the rest become `FM:<slug>` exclusives | the report's `catalogue size` excludes fookle's **and** hobbydigi's own rows (`exclude_shops=('fookle','hobbydigi')`); `evaluate()` still reports 0 wrong-SKU matches |
 | IT-23 | Fookle `FM:` provisional replaced | a fookle kit stored under `FM:<slug>` | re-import `fookle_hg.csv` after the kit resolves a real JAN | one row for that URL, keyed by the JAN — no `FM:` duplicate | `deleteProvisionalByUrl` deletes any `<PREFIX>:` sku for the URL (covered by `import.service.test.ts` case 15) |
+| IT-24 | Twinnermodel scrape + import | `data/hobbyland.db` present, Playwright installed | `hobbyland_scraper.py tm` then `pnpm import:csv` | `twinnermodel_{hg,mg,rg}.csv` written; batches recorded for shop `twinnermodel` | every kit's JAN comes from the handle (report `JAN from handle` ≈ all rows); dashboard badges「Twinnermodel 最平」/「只有 Twinnermodel 有貨」on real data |
+| IT-25 | Twinnermodel no circular matching | twinnermodel rows already imported | re-run `tm` | the report's `catalogue size` excludes twinnermodel's, fookle's **and** hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('twinnermodel','fookle','hobbydigi'))` |
 
 ## 3. Manual Verification Performed
+
+### 2026-10-14 — fifth shop (Twinner Model 千里達) + Shopify products.json via warmed browser
+
+- `pnpm build` clean under strict tsc (frontend 110 modules). `pnpm test` → **backend 45/45,
+  frontend 87/87**. Python: **200/200** (`scripts/venv/bin/python -m unittest test_hobbyland_scraper`
+  alone: 49, incl. 17 new twinnermodel cases).
+- Probed the shop first: plain `curl` (even with a browser UA) 429s `local_rate_limited` on every
+  endpoint, but headless Chromium renders the listing with **no interactive challenge**, and once
+  the page is warm, same-origin `fetch('/collections/<handle>/products.json?limit=250&page=N')`
+  answers 200 — so the branch reads structured JSON instead of DOM cards (unlike animes-pro).
+- Currency verified before trusting prices: the storefront renders TWD (`Shopify.currency.active =
+  'TWD'`, rate 4.1775) while `products.json` returns the shop's base currency — spot-checked
+  against hobbyland's HKD price for JAN `4573102650962` (json `102.00` × 4.1775 ≈ DOM `427.00
+  TWD`), confirming the JSON figures are HKD and directly comparable.
+- Live `tm` run: HG collection 465 products → **196 in-stock Bandai kits**, MG **57**, RG **21**
+  (274 total); **all 274 JANs came from the product handle** (`JAN from handle: 274`, 0 catalogue,
+  0 provisional `TM:`), 0 variants quashed.
+- `enrich_series.py` classified **270/270 distinct titles** via the JEV API (0 failed); import into
+  the existing database added the shop through the `INSERT OR IGNORE` seed — **no migration** —
+  batches 195-197, **0 skipped**.
+- Cross-shop verification on real data: **229** `(grade, sku)` groups join twinnermodel with at
+  least one other shop; in **49** multi-shop groups twinnermodel is the sole cheapest offer (would
+  badge「Twinnermodel 最平」) and **45** groups are twinnermodel-only (badge「只有 Twinnermodel
+  有貨」). `GET /api/comparisons?grade=hg&cheaper=twinnermodel` → 82 rows; freshness includes a
+  `twinnermodel` timestamp.
 
 ### 2026-10-13 — fourth shop (Fookle Model) + WooCommerce Store API + Latin/part-number matcher
 

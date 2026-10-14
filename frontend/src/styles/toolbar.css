@@ -173,3 +173,60 @@
 .freshness-none {
   color: var(--text-dim);
 }
+
+/* --- Series filter + per-series stats strip --- */
+
+.series-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.series-stat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.series-stat-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.series-stat-btn.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-solid));
+}
+
+.series-stat-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.series-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.series-tag[data-series='none'] {
+  color: var(--text-dim);
+}
