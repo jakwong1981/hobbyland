@@ -29,7 +29,7 @@ export function createInMemoryDatabase(): DatabaseSync {
   return db;
 }
 
-function migrate(db: DatabaseSync): void {
+export function migrate(db: DatabaseSync): void {
   db.exec(readFileSync(MIGRATION_PATH, 'utf-8'));
   // 0000_init.sql is CREATE IF NOT EXISTS only — existing DBs need the column added in place.
   const columns = db.prepare("SELECT name FROM pragma_table_info('products')").all() as { name: string }[];

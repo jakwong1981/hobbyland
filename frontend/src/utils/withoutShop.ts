@@ -25,7 +25,9 @@ function computeCheapest(offers: Offer[]): { cheapestShop: CheapestShop; saving:
 export function withoutShop(rows: ComparisonRow[], shop: ShopCode): ComparisonRow[] {
   const result: ComparisonRow[] = [];
   for (const row of rows) {
-    const offers = row.offers.filter((offer) => offer.shop !== shop);
+    const offers = row.offers
+      .filter((offer) => offer.shop !== shop)
+      .sort((a, b) => a.price - b.price);
     if (offers.length === 0) continue;
     const { cheapestShop, saving } = computeCheapest(offers);
     result.push({

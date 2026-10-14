@@ -1,6 +1,6 @@
 // backend/tests/import.service.test.ts
 import { describe, expect, it } from 'vitest';
-import { createInMemoryDatabase } from '../src/db/client.js';
+import { createInMemoryDatabase, migrate } from '../src/db/client.js';
 import { ProductRepository } from '../src/repositories/product.repository.js';
 import { buildFreshness, importProducts, parseProductCsv } from '../src/services/import.service.js';
 import type { ShopCode } from '../src/types/index.js';
@@ -272,5 +272,35 @@ describe('buildFreshness', () => {
     importProducts(repo, 'hobbydigi', 'hg', 'a.csv', records, 0);
 
     expect(repo.findProducts({ shop: 'hobbydigi' })).toHaveLength(1);
+  });
+
+  it('migrates a legacy products table that predates image_url and series before indexing', () => {
+    const db = createInMemoryDatabase();
+    db.exec('DROP INDEX IF EXISTS idx_products_series');
+    db.exec('DROP TABLE products');
+    db.exec(`
+      CREATE TABLE products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shop_id INTEGER NOT NULL REFERENCES shops(id),
+        sku TEXT NOT NULL,
+        grade TEXT NOT NULL,
+        title TEXT NOT NULL,
+        price REAL NOT NULL,
+        regular_price REAL,
+        url TEXT NOT NULL,
+        stock TEXT,
+        sell_type TEXT,
+        batch_id INTEGER REFERENCES import_batches(id),
+        imported_at TEXT NOT NULL,
+        UNIQUE (shop_id, sku, grade)
+      )
+    `);
+
+    migrate(db);
+
+    const columns = db.prepare("SELECT name FROM pragma_table_info('products')").all() as { name: string }[];
+    expect(columns.map((c) => c.name)).toEqual(expect.arrayContaining(['image_url', 'series']));
+    const indexes = db.prepare("SELECT name FROM pragma_index_list('products')").all() as { name: string }[];
+    expect(indexes.map((i) => i.name)).toContain('idx_products_series');
   });
 });

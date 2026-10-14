@@ -6,8 +6,7 @@ import { FactionCrest } from './components/FactionCrest';
 import { FactionToggle } from './components/FactionToggle';
 import { FactionWipe } from './components/FactionWipe';
 import { useFaction } from './hooks/useFaction';
-import { SHOP_CODES } from './types';
-import { SHOP_LABEL } from './shops';
+import { DASHBOARD_SHOPS, SHOP_LABEL } from './shops';
 
 type Page = 'dashboard' | 'import';
 
@@ -26,7 +25,7 @@ export default function App() {
           <div className="brand-text">
             <h1>Gunpla 格價</h1>
             <p className="brand-sub">
-              Price Recon // {SHOP_CODES.map((shop) => SHOP_LABEL[shop]).join(' × ')}
+              Price Recon // {DASHBOARD_SHOPS.map((shop) => SHOP_LABEL[shop]).join(' × ')}
             </p>
           </div>
         </div>

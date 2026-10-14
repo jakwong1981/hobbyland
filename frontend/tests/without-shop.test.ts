@@ -1,5 +1,6 @@
 // frontend/tests/without-shop.test.ts
 import { describe, expect, it } from 'vitest';
+import { productImageUrl } from '../src/utils/productImage';
 import { withoutShop } from '../src/utils/withoutShop';
 import { buildOffer, buildRow } from './fixtures';
 
@@ -75,5 +76,34 @@ describe('withoutShop', () => {
     const [result] = withoutShop([row], 'hobbydigi');
 
     expect(result).toEqual(row);
+  });
+
+  it('sorts remaining offers by price before re-deriving cheapestShop and saving', () => {
+    const row = buildRow({
+      offers: [
+        buildOffer({ shop: 'animes-pro', price: 110 }),
+        buildOffer({ shop: 'hobbydigi', price: 70 }),
+        buildOffer({ shop: 'fookle', price: 85 }),
+      ],
+      cheapestShop: 'hobbydigi',
+      saving: 15,
+    });
+
+    const [result] = withoutShop([row], 'hobbydigi');
+
+    expect(result!.offers.map((o) => o.shop)).toEqual(['fookle', 'animes-pro']);
+    expect(result!.cheapestShop).toBe('fookle');
+    expect(result!.saving).toBe(25);
+  });
+
+  it('skips omitted dashboard shops when picking a product image', () => {
+    const row = buildRow({
+      offers: [
+        buildOffer({ shop: 'hobbydigi', imageUrl: 'https://cdn.example/hd.jpg' }),
+        buildOffer({ shop: 'fookle', imageUrl: 'https://cdn.example/fm.jpg' }),
+      ],
+    });
+
+    expect(productImageUrl(row)).toBe('https://cdn.example/fm.jpg');
   });
 });
