@@ -350,6 +350,57 @@ class GivesUpTest(HobbydigiRetryTest):
             hs._hobbydigi_page_isolated(self.playwright, URL)
 
 
+class FakeGotoPage:
+    """Minimal Playwright page stub: one queued outcome per goto call."""
+
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.urls = []
+
+    def goto(self, url, wait_until=None, timeout=None):
+        self.urls.append(url)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+
+
+class GotoWithRetryTest(unittest.TestCase):
+    def setUp(self):
+        self._sleep = hs.time.sleep
+        self.slept = []
+        hs.time.sleep = self.slept.append
+
+    def tearDown(self):
+        hs.time.sleep = self._sleep
+
+    def test_a_transient_goto_failure_is_retried_and_recovers(self):
+        """The production failure: one DNS/timeout blip must not kill the run."""
+        page = FakeGotoPage([TimeoutError("Page.goto: Timeout 30000ms exceeded"),
+                             None])
+
+        hs._goto_with_retry(page, URL, 30000)
+
+        self.assertEqual(page.urls, [URL, URL])
+        self.assertEqual(len(self.slept), 1)
+
+    def test_exhausted_attempts_reraise_the_last_failure(self):
+        failures = [TimeoutError("blip")] * hs.PAGE_ATTEMPTS
+        page = FakeGotoPage(failures)
+
+        with self.assertRaises(TimeoutError):
+            hs._goto_with_retry(page, URL, 30000)
+
+        self.assertEqual(len(page.urls), hs.PAGE_ATTEMPTS)
+
+    def test_first_try_success_navigates_once_without_sleeping(self):
+        page = FakeGotoPage([None])
+
+        hs._goto_with_retry(page, URL, 30000)
+
+        self.assertEqual(page.urls, [URL])
+        self.assertEqual(self.slept, [])
+
+
 class CheckboxPointTest(unittest.TestCase):
     def test_measures_the_tick_box_inside_the_widget_frame(self):
         page = FakeTurnstilePage((IFRAME_BOX, {'input[type="checkbox"]': CHECKBOX_BOX}))

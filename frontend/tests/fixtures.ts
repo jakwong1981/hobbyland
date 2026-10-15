@@ -1,6 +1,6 @@
 // frontend/tests/fixtures.ts
 import { vi, type Mock } from 'vitest';
-import type { ComparisonRow, ImportFreshness, Offer } from '../src/types';
+import type { ComparisonRow, ImportFreshness, Offer, ScrapeJobStatus } from '../src/types';
 
 export function buildOffer(overrides: Partial<Offer> = {}): Offer {
   return {
@@ -57,14 +57,20 @@ function envelope(data: unknown): Response {
   );
 }
 
-// The dashboard issues two queries, so the stub must route on the requested URL
-// instead of answering every path with the comparison payload.
+// The dashboard issues several queries, so the stub must route on the requested
+// URL instead of answering every path with the comparison payload.
 export function stubApi(
   comparisons: ComparisonRow[],
   freshness: ImportFreshness = buildFreshness(),
+  scrapeStatus: ScrapeJobStatus = { state: 'idle', startedAt: null, finishedAt: null, exitCode: null },
 ): Mock {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
-    const data = String(input).includes('/api/imports/freshness') ? freshness : comparisons;
+    const url = String(input);
+    const data = url.includes('/api/imports/freshness')
+      ? freshness
+      : url.includes('/api/scrape')
+        ? scrapeStatus
+        : comparisons;
     return Promise.resolve(envelope(data));
   });
   vi.stubGlobal('fetch', fetchMock);

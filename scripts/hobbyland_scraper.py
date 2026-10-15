@@ -467,6 +467,25 @@ def _with_retry(fn, what):
     return None  # unreachable
 
 
+def _goto_with_retry(page, url, timeout_ms, what="Navigation"):
+    """page.goto, retrying transient failures (flaky container DNS/network).
+
+    Playwright's TimeoutError is not the builtin TimeoutError, so _with_retry
+    cannot wrap browser navigations; without this a single blip kills the run.
+    """
+    for attempt in range(1, PAGE_ATTEMPTS + 1):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            return
+        except Exception as exc:
+            if attempt == PAGE_ATTEMPTS:
+                raise
+            wait = retry_wait_seconds(exc)
+            print(f"   ⚠️  {what} failed (attempt {attempt}/"
+                  f"{PAGE_ATTEMPTS}): {exc} — waiting {wait}s")
+            time.sleep(wait)
+
+
 def scrape_category(segments, max_pages=None):
     """Loop pages 1..max for one category and return one dict per product.
 
@@ -557,7 +576,7 @@ def _solve_animes_pro_challenge(page, collection_handle):
     listing, so success = product cards appear within the wait budget.
     """
     url = f"{ANIME_PRO_BASE_URL}/collections/{collection_handle}"
-    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    _goto_with_retry(page, url, 30000, what="Collection goto")
     if not _wait_animes_pro_listing(page):
         raise RuntimeError(
             f"Shopify bot challenge did not clear for {url} "
@@ -607,8 +626,8 @@ def scrape_animes_pro_category(collection_handle):
         page_num = 1
         while True:
             if page_num > 1:
-                page.goto(f"{base}?page={page_num}",
-                          wait_until="domcontentloaded", timeout=30000)
+                _goto_with_retry(page, f"{base}?page={page_num}", 30000,
+                                 what=f"Page {page_num} goto")
                 if not _wait_animes_pro_listing(page, timeout_s=15):
                     # past the last page Shopify renders an empty grid
                     print(f"   — page {page_num}: no cards, "
@@ -1851,7 +1870,7 @@ def _twinner_warm_up(page, first_handle):
     proves the session, after which products.json answers normally.
     """
     url = f"{TWINNER_BASE_URL}/collections/{first_handle}"
-    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    _goto_with_retry(page, url, 45000, what="Warm-up goto")
     try:
         page.wait_for_selector("product-card", timeout=AP_CHALLENGE_WAIT_S * 1000)
     except Exception:

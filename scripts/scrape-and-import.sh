@@ -48,7 +48,9 @@ if [ "$SKIP_SERIES" -eq 1 ]; then
   echo "==> Skipping series classification (--skip-series)"
 else
   echo "==> Classifying Gundam series (needs JEV_API_KEY or DEEPSEEK_API_KEY; cached runs are free)"
-  "$PY" "$SCRIPT_DIR/enrich_series.py" --dir "$CSV_OUT_DIR" ${SERIES_ENGINE:+--engine "$SERIES_ENGINE"}
+  "$PY" "$SCRIPT_DIR/enrich_series.py" --dir "$CSV_OUT_DIR" \
+    --cache "$CSV_OUT_DIR/series_cache.json" \
+    ${SERIES_ENGINE:+--engine "$SERIES_ENGINE"}
 
   # enrich_series.py exits 0 even when it classified nothing (it falls back to
   # cache-only enrichment so a scrape never dies on classification), so count the
@@ -78,9 +80,14 @@ fi
 if [ "$DOCKER" -eq 1 ]; then
   echo "==> Importing into the Docker container"
   CSV_DIR="$CSV_OUT_DIR" scripts/docker-deploy.sh --import
-else
+elif [ -f backend/src/cli/import.ts ] && command -v pnpm >/dev/null 2>&1; then
   echo "==> Importing into the local database"
   pnpm import:csv -- --dir "$CSV_OUT_DIR"
+else
+  # Inside the runtime container there is no pnpm/source tree — only the
+  # compiled backend under /app/backend/dist (see Dockerfile).
+  echo "==> Importing into the local database (compiled CLI)"
+  node backend/dist/cli/import.js --dir "$CSV_OUT_DIR"
 fi
 
 echo "==> Scrape + import finished"

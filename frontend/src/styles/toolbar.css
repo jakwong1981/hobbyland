@@ -114,6 +114,28 @@
   margin-left: auto;
 }
 
+.scrape-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.scrape-btn:hover:not(:disabled) {
+  box-shadow: 0 0 10px var(--glow);
+}
+
+.scrape-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
 .freshness {
   display: flex;
   flex-wrap: wrap;

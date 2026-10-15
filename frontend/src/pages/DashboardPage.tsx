@@ -12,6 +12,7 @@ import { KitShowcase } from '../components/KitShowcase';
 import { ViewToggle } from '../components/ViewToggle';
 import { useComparisons } from '../hooks/useComparisons';
 import { useImportFreshness } from '../hooks/useImportFreshness';
+import { useScrapeJob } from '../hooks/useScrapeJob';
 import type { ComparisonRow, DashboardView, Grade, SeriesFilterValue, ShopFilterValue } from '../types';
 import { countBySeries } from '../utils/seriesStats';
 import { withoutShop } from '../utils/withoutShop';
@@ -30,6 +31,7 @@ export function DashboardPage() {
     ...(q.trim() ? { q: q.trim() } : {}),
   });
   const { data: freshness, isLoading: isFreshnessLoading } = useImportFreshness(grade);
+  const { running, failed, start, startError } = useScrapeJob();
   const rows = useMemo(() => withoutShop(data ?? NO_ROWS, 'hobbydigi'), [data]);
 
   const visible = useMemo(
@@ -59,6 +61,11 @@ export function DashboardPage() {
       <div className="status-row">
         {isLoading && <p className="status">載入中…</p>}
         {isError && <p className="status error">載入失敗：{error.message}</p>}
+        <button type="button" className="scrape-btn" disabled={running} onClick={() => start()}>
+          {running ? 'Processing…' : '更新'}
+        </button>
+        {startError && <p className="status error">更新失敗：{startError.message}</p>}
+        {failed && <p className="status error">更新失敗：scrape script 執行出錯</p>}
         <FreshnessBar freshness={freshness} isLoading={isFreshnessLoading} />
       </div>
       {data && (

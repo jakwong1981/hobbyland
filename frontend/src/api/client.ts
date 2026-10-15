@@ -18,6 +18,13 @@ export async function apiGet<T>(path: string): Promise<T> {
   return body.data;
 }
 
+export async function apiPost<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'POST' });
+  const body = (await res.json()) as ApiResponse<T>;
+  if (!res.ok) throw new ApiError(res.status, body.message);
+  return body.data;
+}
+
 export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
   const res = await fetch(path, { method: 'POST', body: form });
   const body = (await res.json()) as ApiResponse<T>;

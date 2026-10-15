@@ -6,6 +6,10 @@ services:
     environment:
       PORT: 8080
       DATA_DIR: /data
+      CSV_DIR: /data
+      HD_HEADLESS: "1"
+      JEV_API_KEY: ${JEV_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - ./data:/data
       - ${CSV_DIR:-./data}:/csvs:ro

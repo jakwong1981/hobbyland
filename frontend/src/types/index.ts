@@ -54,6 +54,15 @@ export interface ImportResult {
   skipped: number;
 }
 
+export type ScrapeJobState = 'idle' | 'running' | 'completed' | 'failed';
+
+export interface ScrapeJobStatus {
+  state: ScrapeJobState;
+  startedAt: string | null;
+  finishedAt: string | null;
+  exitCode: number | null;
+}
+
 export interface ImportFreshness {
   grade: Grade | null;
   overall: string | null;
