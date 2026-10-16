@@ -8,13 +8,13 @@ hobbyland/
 ├── package.json                 # workspace root: dev/build/test/import:csv/start
 ├── pnpm-workspace.yaml          # workspaces: backend, frontend
 ├── tsconfig.base.json           # shared strict TS config
-├── .env.example                 # PORT, DATA_DIR, NODE_ENV, CSV_DIR
+├── .env.example                 # PORT, TLS_CERT_PATH, TLS_KEY_PATH, DATA_DIR, NODE_ENV, CSV_DIR
 ├── Dockerfile                   # multi-stage (build → runtime, node:24-slim)
-├── docker-compose.yml           # single service, ./data volume, port 8080
+├── docker-compose.yml           # single service, ./data + ./certs volumes, port 8089
 ├── backend/
 │   ├── drizzle/0000_init.sql    # schema migration (executed on boot)
 │   └── src/
-│       ├── index.ts             # bootstrap: config → db → app.listen
+│       ├── index.ts             # bootstrap: config → db → https/http listen (TLS when certs present)
 │       ├── config.ts            # env validation (zod)
 │       ├── app.ts               # express wiring + static frontend serving
 │       ├── cli/import.ts        # CSV folder/file import CLI (`pnpm import:csv`)
@@ -28,7 +28,7 @@ hobbyland/
 │       ├── routes/index.ts      # /api router
 │       ├── middleware/error.middleware.ts       # traceId + ApiErrorResponse
 │       └── utils/{logger.ts,app-error.ts}
-│   └── tests/                   # vitest: comparison, import, api (supertest)
+│   └── tests/                   # vitest: comparison, import, config, api + scrape.api (supertest)
 ├── frontend/
 │   ├── index.html               # data-faction bootstrap (pre-paint theme) + SPA root
 │   ├── tests/                   # vitest + RTL (jsdom): components, dashboard, faction, sort-filter, api client,

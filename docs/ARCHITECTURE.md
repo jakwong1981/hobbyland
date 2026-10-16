@@ -185,11 +185,11 @@ flowchart LR
         CRON[cron job] --> SCR[hobbyland_scraper.py]
         SCR --> CSV[(up to 15 CSV files)]
         CSV --> CLI[pnpm import:csv]
-        subgraph Docker container :8080
+        subgraph Docker container :8089
             BE[Express backend<br/>node:24-slim] --> DB[(SQLite /data volume)]
             BE --> FE[frontend/dist static]
         end
         CLI --> DB
     end
-    Browser -->|HTTP :8080| BE
+    Browser -->|HTTPS :8089| BE
 ```

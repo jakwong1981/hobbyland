@@ -15,7 +15,7 @@ FROM node:24-slim AS runtime
 RUN corepack enable
 WORKDIR /app
 ENV NODE_ENV=production \
-    PORT=8080 \
+    PORT=8089 \
     DATA_DIR=/data \
     CSV_DIR=/data \
     PYTHON=/opt/scraper-venv/bin/python \
@@ -52,6 +52,6 @@ RUN chmod +x scripts/scrape-and-import.sh
 # Declared last so earlier layers keep their build cache.
 ENV HD_HEADLESS=1
 
-EXPOSE 8080
+EXPOSE 8089
 VOLUME ["/data"]
 CMD ["node", "backend/dist/index.js"]

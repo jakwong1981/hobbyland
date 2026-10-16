@@ -2,6 +2,7 @@ node_modules/
 dist/
 data/
 venv/
+certs/
 *.log
 .env
 .DS_Store

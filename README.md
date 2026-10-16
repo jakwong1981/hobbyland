@@ -106,7 +106,7 @@ existing `data/hobbyland.db` upgrades itself rather than failing.
 |---|---|---|
 | `react` / `react-dom` | 18.3.1 | Function components + hooks only |
 | `@tanstack/react-query` | 5.62.11 | Server state, caching, refetch-on-filter |
-| `vite` | 6.0.7 | Dev server (`/api` proxied to :8080) + production build |
+| `vite` | 6.0.7 | Dev server (`/api` proxied to :8089) + production build |
 | `@testing-library/react` / `jsdom` / `vitest` | dev | Component and hook tests |
 
 Local UI state stays in `useState`; only server data goes through React Query. No global store —
@@ -304,8 +304,8 @@ Two CSS details that are load-bearing rather than cosmetic:
 corepack enable
 pnpm install
 pnpm build          # type-check + build both packages
-pnpm test           # backend 38 + frontend 68
-pnpm dev            # backend :8080 (tsx watch) + frontend :5173 (vite, /api proxied)
+pnpm test           # backend 56 + frontend 91
+pnpm dev            # backend :8089 (tsx watch) + frontend :5173 (vite, /api proxied)
 ```
 
 > **The database is not committed.** `data/` is gitignored, so a fresh clone starts empty and the
@@ -314,7 +314,8 @@ pnpm dev            # backend :8080 (tsx watch) + frontend :5173 (vite, /api pro
 Production-style run (backend serves the built SPA):
 
 ```bash
-pnpm build && pnpm start        # http://localhost:8080
+scripts/generate-cert.sh                # one-time: self-signed TLS cert into ./certs
+pnpm build && pnpm start        # https://localhost:8089 (http when ./certs is absent)
 ```
 
 ---
@@ -335,7 +336,7 @@ flowchart LR
     FM --> CSV
     TM --> CSV
     CSV -->|"pnpm import:csv"| DB[("SQLite")]
-    DB --> UI["Dashboard :8080"]
+    DB --> UI["Dashboard :8089"]
 ```
 
 The scraper lives in this repository at `scripts/hobbyland_scraper.py` and runs from
@@ -562,7 +563,9 @@ comparable with the other four shops with no conversion step.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `8080` | HTTP listen port |
+| `PORT` | `8089` | Listen port |
+| `TLS_CERT_PATH` | `./certs/server.pem` if present | TLS certificate; HTTPS when set together with `TLS_KEY_PATH`, plain HTTP otherwise |
+| `TLS_KEY_PATH` | `./certs/server-key.pem` if present | TLS private key (see `scripts/generate-cert.sh`) |
 | `DATA_DIR` | `<repo>/data` | SQLite directory (`/data` inside Docker) |
 | `NODE_ENV` | `development` | Express mode |
 | `CSV_DIR` | *(none)* | Default `--dir` for the import CLI |
@@ -633,22 +636,27 @@ The deploy script is defensive about two failure modes that both occurred in pra
 2. **A stale container holds the port** — it runs `docker compose down --remove-orphans`, then
    removes any leftover container squatting the compose-generated name (a container started outside
    this compose project will not be reclaimed by `down` alone), then `up -d --force-recreate`.
-   Without this, an old image keeps serving an outdated API contract on `:8080` and the health check
+   Without this, an old image keeps serving an outdated API contract on `:8089` and the health check
    passes anyway.
+
+The stack serves HTTPS with a self-signed certificate: `docker-deploy.sh` generates
+`./certs/server.pem` + `./certs/server-key.pem` via `scripts/generate-cert.sh` when missing, and
+compose mounts `./certs` read-only at `/certs`. The browser will warn until the certificate is
+trusted — expected at this phase. The health check uses `curl -k` for the same reason.
 
 Image: multi-stage `node:24-slim` — stage 1 builds both packages, stage 2 installs backend
 production deps only and copies `backend/dist`, `backend/drizzle`, `frontend/dist`. Schema migration
 runs on boot and is idempotent.
 
 Volumes: `./data:/data` persists the database; `${CSV_DIR:-./data}:/csvs:ro` exposes CSVs for
-in-container import.
+in-container import; `./certs:/certs:ro` provides the TLS certificate.
 
 ---
 
 ## 10. Testing
 
 ```bash
-pnpm test        # backend 38/38 · frontend 68/68
+pnpm test        # backend 56/56 · frontend 91/91
 ```
 
 | Suite | Environment | Covers |
@@ -656,6 +664,8 @@ pnpm test        # backend 38/38 · frontend 68/68
 | `comparison.service.test.ts` | node | Verdict computation: cheaper + saving, tie, single-shop, `exclusiveShop`, grade separation, SKU ordering, deterministic group title, and N-way offers (runner-up saving, bottom-two tie, three-way tie) |
 | `import.service.test.ts` | node + in-memory SQLite | CSV parsing, validation/skip rules, batch records, upsert idempotency, `image_url` mapping and **preservation**, `buildFreshness` (per-shop, latest-overall, absent shop → null, shop outside `SHOP_CODES` still counted) |
 | `api.test.ts` | node + supertest | All five endpoints, status codes, `traceId` on validation failure, freshness scoping by grade and the unscoped case |
+| `config.test.ts` | node | `PORT` default 8089, `./certs` TLS fallback (both files, one file, explicit env wins), lone TLS path pass-through, out-of-range port rejected |
+| `scrape.api.test.ts` | node + supertest | Scrape-job lifecycle: idle status, run + 409 on concurrent start, failure exit code surfaced, missing script → 500 |
 | `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「最平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (every shop listed, one or more missing, no history, loading, failed), tabs, search |
 | `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter (option count derived from `SHOP_CODES.length + 1`), filtered counts, filter-specific empty state |
 | `faction.test.tsx` | jsdom + RTL | Theme default, persistence across mounts, `<html data-faction>` mirroring, unknown-value fallback |
@@ -663,6 +673,9 @@ pnpm test        # backend 38/38 · frontend 68/68
 | `count-up.test.tsx` | jsdom + RTL | `useCountUp` — reduced-motion shortcut, zero→target tween, retarget mid-flight, cancel on unmount |
 | `layout.test.tsx` | jsdom + RTL | HeroBanner stat tiles and dual faction copy, KitShowcase marquee clones and photo-failure drop, ComparisonGallery winner mark, FactionWipe, table/gallery toggle |
 | `dashboard.test.tsx` | jsdom + RTL | API client unwrapping and `ApiError`, query-string building, refetch on grade change, the freshness request is grade-scoped and its timestamps render on the page, error surfacing |
+| `series-stats.test.ts` / `series-filter.test.tsx` | jsdom + RTL | `countBySeries` / `seriesLabel`; series select narrows the table with `M / N` counts, 未分類 filter, stat-chip toggle |
+| `without-shop.test.ts` | jsdom | `withoutShop` — offer removal, verdict re-derivation (exclusive / tie / drop), offer re-sorting, image selection skipping omitted shops |
+| `scrape-button.test.tsx` | jsdom + RTL | Dashboard scrape button — trigger, disabled while processing, re-enable on completion, error surfacing |
 
 The database is a **fresh in-memory SQLite per test** — SQL runs for real rather than being mocked
 away. `fetch` is stubbed per test and React Query retries are disabled.

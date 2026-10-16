@@ -2,9 +2,11 @@ services:
   app:
     build: .
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8089}:8089"
     environment:
-      PORT: 8080
+      PORT: 8089
+      TLS_CERT_PATH: /certs/server.pem
+      TLS_KEY_PATH: /certs/server-key.pem
       DATA_DIR: /data
       CSV_DIR: /data
       HD_HEADLESS: "1"
@@ -12,5 +14,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - ./data:/data
+      - ./certs:/certs:ro
       - ${CSV_DIR:-./data}:/csvs:ro
     restart: unless-stopped

@@ -16,9 +16,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PORT="${PORT:-8080}"
+PORT="${PORT:-8089}"
 SERVICE="app"
-APP_URL="http://localhost:${PORT}"
+APP_URL="https://localhost:${PORT}"
 DAEMON_WAIT_S="${DAEMON_WAIT_S:-90}"
 HEALTH_WAIT_S="${HEALTH_WAIT_S:-30}"
 BUILD=0
@@ -107,7 +107,8 @@ wait_until_healthy() {
   local i
   echo "==> Waiting for ${APP_URL} to become healthy"
   for i in $(seq 1 "$HEALTH_WAIT_S"); do
-    if curl -fsS "${APP_URL}/api/imports" > /dev/null 2>&1; then
+    # -k: the container serves a self-signed certificate at this phase
+    if curl -kfsS "${APP_URL}/api/imports" > /dev/null 2>&1; then
       echo "==> Healthy after ${i}s"
       return 0
     fi
@@ -134,6 +135,12 @@ if [ "$IMPORT" -eq 1 ]; then
     exit 1
   fi
   export CSV_DIR
+fi
+
+# The stack serves HTTPS using a self-signed certificate mounted from ./certs.
+if [ ! -f certs/server.pem ] || [ ! -f certs/server-key.pem ]; then
+  echo "==> No TLS certificate found in ./certs — generating a self-signed one"
+  "$(dirname "$0")/generate-cert.sh"
 fi
 
 remove_existing_container

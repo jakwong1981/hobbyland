@@ -34,7 +34,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 > Cases 8-10 cast a third shop code that `ShopCode` does not declare. They pin the
 > N-way arithmetic without adding a shop that has no data source behind it.
 
-### import.service.test.ts (20 tests)
+### import.service.test.ts (21 tests)
 
 | # | Case | Asserts |
 |---|---|---|
@@ -58,6 +58,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 17 | CSV with `series` | column mapped through to the stored product |
 | 18 | Stale re-import without `series` over a classified row | stored `series` **preserved** via COALESCE, price still updated |
 | 19 | `findProducts({ series })` | only rows of that series returned |
+| 20 | Legacy `products` table predating `image_url` / `series` | migrated (columns added) before indexing |
 
 ### api.test.ts (12 tests, supertest + in-memory DB)
 
@@ -76,7 +77,27 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 10 | GET /api/imports/freshness | no `grade` | 200, `grade = null`, `overall` non-null |
 | 11 | GET /api/imports/freshness | `grade=pg` (invalid) | 400 + traceId |
 
-### Frontend (`frontend/tests/`, 87 tests)
+### config.test.ts (6 tests)
+
+| # | Case | Asserts |
+|---|---|---|
+| 1 | Empty env | `PORT` defaults to 8089; TLS paths unset when no certificate exists |
+| 2 | `./certs` pair present (`existsSync` mocked) | falls back to `certs/server.pem` + `certs/server-key.pem` |
+| 3 | Only one certificate file present | no fallback — both paths stay unset |
+| 4 | Explicit `TLS_CERT_PATH` / `TLS_KEY_PATH` | env wins over the `./certs` fallback |
+| 5 | Lone explicit TLS path | passed through for `index.ts` to reject at boot |
+| 6 | `PORT=70000` | zod rejects the out-of-range port |
+
+### scrape.api.test.ts (4 tests, supertest + stub scrape script)
+
+| # | Case | Expected |
+|---|---|---|
+| 1 | Initial status | 200, `idle` |
+| 2 | Run the script; second POST while running | 202 start, 409 concurrent run, `completed` with exit code 0 after polling |
+| 3 | Script exits non-zero | status `failed` with the exit code surfaced |
+| 4 | Script path does not exist | 500 AppError「Scrape script not found」|
+
+### Frontend (`frontend/tests/`, 91 tests)
 
 | File | Cases |
 |---|---|
@@ -89,6 +110,8 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | sort-filter.test.tsx (13) | `useComparisonSort` (incoming order kept while unsorted, title asc/desc, per-shop price asc/desc with the non-carrying shop always last, input array not mutated); `ComparisonTable` (three sortable headers start `aria-sort="none"`, no 判定 column any more, the verdict badge renders under the thumbnail inside the 產品 cell, click reorders rows + flips `aria-sort`, price header reorders); `ShopFilter` (defaults to `all`, listing every shop plus 全部, emits choice); `DashboardPage` (all-by-default count, filtered `M / N` count with the other shop's rows hidden, filter-specific empty state) |
 | series-stats.test.ts (5) | `countBySeries` (counts per series sorted desc, unclassified rows excluded, empty when nothing classified); `seriesLabel` (known ids → 中文名, unmapped id passes through, null → `—`) |
 | series-filter.test.tsx (5) | `SeriesFilter` (only series present in rows, with counts, plus 未分類); `DashboardPage` (series select narrows the table + `M / N` count, `__none__` filters to unclassified, stat chip toggles the series filter, table column shows the series name / `—`) |
+| without-shop.test.ts (7) | `withoutShop` (drops the omitted shop's offers and re-derives the verdict, promotes a lone remaining offer to an exclusive, reports a tie between level remaining offers, drops a row only that shop carried, leaves rows without that shop untouched, re-sorts remaining offers before deriving `cheapestShop`/`saving`, skips omitted shops when picking the product image) |
+| scrape-button.test.tsx (2) | `DashboardPage` scrape button (triggers the scrape, greys out while processing, re-enables on completion; surfaces an error when the scrape fails) |
 
 `fetch` is stubbed per test; `QueryClient` retries are disabled. `tests/fixtures.ts` exports
 `stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
@@ -96,7 +119,7 @@ queries, so a single-payload stub would answer the freshness request with a comp
 
 `tests/setup.ts` also installs a `window.matchMedia` stub (jsdom has none) returning `matches: false`.
 
-Current status: **backend 45/45, frontend 87/87 passing**; Python `scripts/test_*.py` 200/200 (incl. `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 49: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**); `pnpm build` clean under strict TS.
+Current status: **backend 56/56, frontend 91/91 passing**; Python `scripts/test_*.py` 200/200 (incl. `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 49: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**); `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
@@ -113,20 +136,20 @@ Current status: **backend 45/45, frontend 87/87 passing**; Python `scripts/test_
 | IT-08 | Malformed CSV upload | server running | column-count mismatch | 400 | transaction rolled back |
 | IT-09 | SPA serving | `pnpm build` done | `GET /` | index.html | title「Gunpla 格價 // Price Recon」, `<html data-faction>` bootstrap present |
 | IT-10 | Re-import idempotency | IT-01 done | run IT-01 again | same product count, one extra batch per CSV | no duplicate (shop, sku, grade) |
-| IT-11 | Docker e2e | image built | `docker compose up` | UI on :8080 with data volume | IT-03 repeatable in container |
+| IT-11 | Docker e2e | image built | `docker compose up` | UI on :8089 with data volume | IT-03 repeatable in container |
 | IT-12 | Exclusive verdict end-to-end | IT-01 done | `GET /api/comparisons?grade=hg` | 166 rows with `exclusiveShop` set | UI shows「只有 <Shop> 有貨」, no「最平」badge on those rows |
 | IT-12b | Three-shop verdict | IT-01 done | `GET /api/comparisons?grade=mg` | 5 rows with 3 offers; `saving` is the gap to the **runner-up**, not to one named rival | a tie between the two cheapest still reads「同價」even with a dearer third offer |
 | IT-13 | Stale CSV cannot strip images | IT-01 done, all rows imaged | re-import a CSV with the `image_url` column removed | that grade keeps 100% image coverage | `SUM(image_url IS NOT NULL)` unchanged; price/stock still refresh |
-| IT-14 | Stale container replacement | a non-compose container named `hobbyland-app-1` squats :8080 on an old image | `scripts/docker-deploy.sh` | script logs「Removing leftover container」and recreates from `:latest` | `GET /api/comparisons` afterwards carries the current contract (`exclusiveShop` present) |
-| IT-15 | Frozen header + zebra | IT-01 done, :8080 serving | scroll the 285-row HG grid | column header stays pinned; rows alternate shade | `th` computed `position: sticky`; `.table-wrapper` is the scroll container |
+| IT-14 | Stale container replacement | a non-compose container named `hobbyland-app-1` squats :8089 on an old image | `scripts/docker-deploy.sh` | script logs「Removing leftover container」and recreates from `:latest` | `GET /api/comparisons` afterwards carries the current contract (`exclusiveShop` present) |
+| IT-15 | Frozen header + zebra | IT-01 done, :8089 serving | scroll the 285-row HG grid | column header stays pinned; rows alternate shade | `th` computed `position: sticky`; `.table-wrapper` is the scroll container |
 | IT-16 | Sort + filter on real data | IT-01 done | click 產品 / any price header; pick a shop in 有售舖頭 | rows reorder client-side with no refetch; count becomes `M / N 個 SKU` | sorting a shop's price puts SKUs that shop does not carry last |
 | IT-17 | Preview image sizing | IT-01 done, 709/709 imaged | inspect a row thumbnail | 88px square (60px ≤640px), `object-fit: cover`, no white letterbox | thumbnail box has no padding and a dark `--surface-2` fill |
 | IT-18 | Last-update readout | IT-01 done | `GET /api/imports/freshness?grade=hg` | 200, all four shops non-null, `overall` = the latest timestamp | dashboard renders four `<time dateTime>` elements above the grid; switching grade refetches |
 | IT-18b | `overall` counts an unlisted shop | a shop present in `shops` but absent from `SHOP_CODES` has the newest timestamp | `GET /api/imports/freshness` | `overall` reflects that newest timestamp | `buildFreshness` derives from the populated map, not a hardcoded shop list |
 | IT-19 | Freshness for an unscraped grade | only HG imported | `GET /api/imports/freshness?grade=rg` | 200, `overall = null`, all shops `null` | readout shows「呢個級別未有匯入紀錄」rather than an HG timestamp |
-| IT-20 | Third price column renders | IT-01 done, :8080 serving | inspect the HG grid | HobbyDigi column present with its own neutral tone **and** a left divider | built CSS contains `--shop-c`, `.shop-head.shop-c`, `.price-cell.shop-c .price-link`, and the divider rule keys off `td.price-cell` / `th.shop-head` rather than `nth-child` |
-| IT-20b | Fourth price column renders | IT-01 done, :8080 serving | inspect the HG grid | Fookle column present with its own neutral tone **and** a left divider | built CSS contains `--shop-d`, `.shop-head.shop-d`, `.price-cell.shop-d .price-link` |
-| IT-20c | Fifth price column renders | IT-01 done, :8080 serving | inspect the HG grid | Twinner Model column present with its own neutral tone | built CSS contains `--shop-e`, `.shop-head.shop-e`, `.price-cell.shop-e .price-link` |
+| IT-20 | Third price column renders | IT-01 done, :8089 serving | inspect the HG grid | HobbyDigi column present with its own neutral tone **and** a left divider | built CSS contains `--shop-c`, `.shop-head.shop-c`, `.price-cell.shop-c .price-link`, and the divider rule keys off `td.price-cell` / `th.shop-head` rather than `nth-child` |
+| IT-20b | Fourth price column renders | IT-01 done, :8089 serving | inspect the HG grid | Fookle column present with its own neutral tone **and** a left divider | built CSS contains `--shop-d`, `.shop-head.shop-d`, `.price-cell.shop-d .price-link` |
+| IT-20c | Fifth price column renders | IT-01 done, :8089 serving | inspect the HG grid | Twinner Model column present with its own neutral tone | built CSS contains `--shop-e`, `.shop-head.shop-e`, `.price-cell.shop-e .price-link` |
 | IT-21 | HobbyDigi variant guard | `hd` scrape done | inspect the resolution report | `variants quashed ≥ 0`; no duplicate `(grade, sku)` inside any `hobbydigi_*.csv` | two differently-titled cards resolving to one barcode are both blanked, so the `UNIQUE (shop_id, sku, grade)` upsert cannot silently swallow one |
 | IT-22 | No circular matching | hobbydigi rows already imported | re-run `hd` | the report's `catalogue size` excludes hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('hobbydigi',))` |
 | IT-22b | Fookle cross-script match + no circular matching | `fm` scrape done, catalogue from hobbyland/animes-pro | run `hobbyland_scraper.py fm` | some English fookle titles inherit a real JAN via the Latin/part-number matcher; the rest become `FM:<slug>` exclusives | the report's `catalogue size` excludes fookle's **and** hobbydigi's own rows (`exclude_shops=('fookle','hobbydigi')`); `evaluate()` still reports 0 wrong-SKU matches |
