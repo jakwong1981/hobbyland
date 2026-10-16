@@ -6,12 +6,16 @@ import { z } from 'zod';
 const DEFAULT_DATA_DIR = resolve(import.meta.dirname, '../../data');
 const DEFAULT_TLS_CERT_PATH = resolve(import.meta.dirname, '../../certs/server.pem');
 const DEFAULT_TLS_KEY_PATH = resolve(import.meta.dirname, '../../certs/server-key.pem');
+export const DEFAULT_CORS_ORIGINS = 'capacitor://localhost,https://localhost,http://localhost';
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8089),
   DATA_DIR: z.string().min(1).default(DEFAULT_DATA_DIR),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   CSV_DIR: z.string().optional(),
+  // Comma-separated origins allowed to call the API cross-origin. Defaults cover
+  // the Capacitor WebView origins (capacitor://localhost on iOS, https://localhost on Android).
+  CORS_ORIGINS: z.string().default(DEFAULT_CORS_ORIGINS),
   TLS_CERT_PATH: z.string().min(1).optional(),
   TLS_KEY_PATH: z.string().min(1).optional(),
 });

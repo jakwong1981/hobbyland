@@ -1,6 +1,7 @@
 packages:
   - backend
   - frontend
+  - mobile
 
 allowBuilds:
   esbuild: true

@@ -97,7 +97,17 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 3 | Script exits non-zero | status `failed` with the exit code surfaced |
 | 4 | Script path does not exist | 500 AppError「Scrape script not found」|
 
-### Frontend (`frontend/tests/`, 91 tests)
+### cors.test.ts (5 tests, supertest + in-memory app)
+
+| # | Case | Expected |
+|---|---|---|
+| 1 | Preflight from the iOS WebView origin | `OPTIONS /api/comparisons` → 204, `access-control-allow-origin: capacitor://localhost` echoed |
+| 2 | Actual request from the Android WebView origin | 200, `access-control-allow-origin: https://localhost` echoed |
+| 3 | Disallowed origin | 200 but **no** allow-origin header (exact-origin matching, no wildcard echo) |
+| 4 | Custom `CORS_ORIGINS` list | listed origin allowed, default WebView origins rejected |
+| 5 | Default origins constant | covers both WebView schemes (`capacitor://localhost`, `https://localhost`) |
+
+### Frontend (`frontend/tests/`, 111 tests)
 
 | File | Cases |
 |---|---|
@@ -112,6 +122,9 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | series-filter.test.tsx (5) | `SeriesFilter` (only series present in rows, with counts, plus 未分類); `DashboardPage` (series select narrows the table + `M / N` count, `__none__` filters to unclassified, stat chip toggles the series filter, table column shows the series name / `—`) |
 | without-shop.test.ts (7) | `withoutShop` (drops the omitted shop's offers and re-derives the verdict, promotes a lone remaining offer to an exclusive, reports a tie between level remaining offers, drops a row only that shop carried, leaves rows without that shop untouched, re-sorts remaining offers before deriving `cheapestShop`/`saving`, skips omitted shops when picking the product image) |
 | scrape-button.test.tsx (2) | `DashboardPage` scrape button (triggers the scrape, greys out while processing, re-enables on completion; surfaces an error when the scrape fails) |
+| client.test.ts (3) | api client base-URL resolution (same-origin relative paths by default; effective base resolved **per request** so a settings change applies without reload; `ApiError` with the server message on non-2xx) |
+| server-config.test.ts (10) | `normalizeApiBase` (trailing slashes stripped, empty string = same-origin, rejects non-http schemes / paths / junk); `getApiBase` precedence (stored override > build-time env > same-origin); `setApiBase`/`clearApiBase` (normalized persistence, invalid URL throws and persists nothing, clear restores build default, **a failed localStorage write keeps the override effective for the session via the in-memory mirror**) |
+| server-settings.test.tsx (7) | `ServerSettings` panel (same-origin default shown, save persists a normalized URL, invalid URL rejected without persisting, 測試 hits `/api/imports/freshness` against the candidate URL with ✓/✗ display, failure message surfaced, reset restores the build default, **saving resets the React Query cache so mounted queries refetch from the new server**) |
 
 `fetch` is stubbed per test; `QueryClient` retries are disabled. `tests/fixtures.ts` exports
 `stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
@@ -119,7 +132,7 @@ queries, so a single-payload stub would answer the freshness request with a comp
 
 `tests/setup.ts` also installs a `window.matchMedia` stub (jsdom has none) returning `matches: false`.
 
-Current status: **backend 56/56, frontend 91/91 passing**; Python `scripts/test_*.py` 200/200 (incl. `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 49: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**); `pnpm build` clean under strict TS.
+Current status: **backend 61/61, frontend 111/111 passing**; Python `scripts/test_*.py` 200/200 (incl. `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 49: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**); `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
@@ -158,6 +171,29 @@ Current status: **backend 56/56, frontend 91/91 passing**; Python `scripts/test_
 | IT-25 | Twinnermodel no circular matching | twinnermodel rows already imported | re-run `tm` | the report's `catalogue size` excludes twinnermodel's, fookle's **and** hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('twinnermodel','fookle','hobbydigi'))` |
 
 ## 3. Manual Verification Performed
+
+### 2026-10-16 — enhancement 7 (hybrid mobile app) + pre-push review fixes
+
+- Full suite after the review round: `pnpm test` → **backend 61/61, frontend 111/111**;
+  `tsc --noEmit` clean on both packages; `bash -n` clean on the three mobile scripts.
+- Code review of the uncommitted Capacitor increment found and fixed:
+  - `queryClient.clear()` after a server switch left mounted observers showing old-server
+    data (fetch count stayed 1) → `resetQueries()` + a regression test that mounts a probe
+    query and asserts it refetches from the new URL.
+  - A failed `localStorage` write in `setApiBase` silently reverted requests to the previously
+    stored server → an in-memory mirror keeps the choice effective for the session
+    (MOB-15).
+  - `allowMixedContent` missing blocked the documented HTTP-LAN-backend workflow on Android
+    (WebView served from `https://localhost`); committed the public dev cert
+    (`dev_server_cert.pem`) so debug builds link on a clean checkout; `mobile/ios/build/`
+    added to `.gitignore` (4,797 build artifacts were about to be committed).
+  - Build script honesty: the release APK is now always signed (debug keystore by default,
+    `ANDROID_KEYSTORE*` for store signing); a failed **signed** iOS archive/export is an
+    error unless `ALLOW_UNSIGNED_IPA=1`; `EXPORT_TEAM_ID` reaches the archive step
+    (`DEVELOPMENT_TEAM`), not just the export options.
+- `git status --untracked-files=all mobile/` dropped from 4,872 to 76 files after the ignore
+  fix; `git check-ignore` confirms `mobile/ios/build/`, `mobile/android/**/build/`,
+  `mobile/node_modules/`, and `dist-mobile/` are all excluded.
 
 ### 2026-10-14 — fifth shop (Twinner Model 千里達) + Shopify products.json via warmed browser
 

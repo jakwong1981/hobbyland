@@ -15,6 +15,14 @@
     "docker:build": "scripts/docker-build.sh",
     "docker:deploy": "scripts/docker-deploy.sh",
     "scrape": "scripts/scrape-and-import.sh",
-    "start": "node backend/dist/index.js"
+    "start": "node backend/dist/index.js",
+    "mobile:sync": "pnpm --filter frontend run build && pnpm --filter mobile exec cap sync",
+    "mobile:build": "scripts/build-mobile.sh all",
+    "mobile:build:android": "scripts/build-mobile.sh android",
+    "mobile:build:ios": "scripts/build-mobile.sh ios",
+    "mobile:run:android": "scripts/run-android-emulator.sh",
+    "mobile:run:ios": "scripts/run-ios-simulator.sh",
+    "mobile:open:android": "pnpm --filter mobile exec cap open android",
+    "mobile:open:ios": "pnpm --filter mobile exec cap open ios"
   }
 }

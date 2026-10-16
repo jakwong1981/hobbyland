@@ -5,6 +5,7 @@ import { ImportPage } from './pages/ImportPage';
 import { FactionCrest } from './components/FactionCrest';
 import { FactionToggle } from './components/FactionToggle';
 import { FactionWipe } from './components/FactionWipe';
+import { ServerSettings } from './components/ServerSettings';
 import { useFaction } from './hooks/useFaction';
 import { DASHBOARD_SHOPS, SHOP_LABEL } from './shops';
 
@@ -31,6 +32,7 @@ export default function App() {
         </div>
         <div className="header-controls">
           <FactionToggle value={faction} onChange={setFaction} />
+          <ServerSettings />
           <nav>
             <button
               className={page === 'dashboard' ? 'nav-btn active' : 'nav-btn'}

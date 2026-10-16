@@ -569,6 +569,7 @@ comparable with the other four shops with no conversion step.
 | `DATA_DIR` | `<repo>/data` | SQLite directory (`/data` inside Docker) |
 | `NODE_ENV` | `development` | Express mode |
 | `CSV_DIR` | *(none)* | Default `--dir` for the import CLI |
+| `CORS_ORIGINS` | `capacitor://localhost,https://localhost,http://localhost` | Comma-separated origins allowed to call `/api/*` cross-origin; defaults cover the mobile WebView (see [`docs/MOBILE.md`](docs/MOBILE.md)) |
 | `LOG_LEVEL` | `info` | pino level |
 | `DEEPSEEK_API_KEY` | *(none)* | Scripts-only: classifies grade for the `hd` (hobbydigi.com) category, powers `review_matches.py`, and backs the DeepSeek fallback engine of `scripts/jev_series.py`. The backend never reads it. |
 | `JEV_API_KEY` | *(none)* | Script-only: an OpenRouter API key — `scripts/jev_series.py` classifies a kit's Gundam series via the Jev decision model on OpenRouter (`POST /api/alpha/decisions`, model `~typesafe/jev-latest`), falling back to DeepSeek when Jev cannot answer. The backend never reads it. |
@@ -715,16 +716,20 @@ frontend/
                                   ShopFilter · FreshnessBar · GradeTabs · SearchBar ·
                                   ViewToggle · HeroBanner · KitShowcase · StatTile ·
                                   ProductImage · ShopLogo · GradeEmblem · MobileSuitArt ·
-                                  FactionToggle · FactionCrest · FactionWipe
+                                  FactionToggle · FactionCrest · FactionWipe · ServerSettings
     hooks/                        useComparisons · useComparisonSort · useFaction ·
                                   useImportFreshness · useCountUp · usePrefersReducedMotion
-    api/                          client · comparison.api · import.api
+    api/                          client · serverConfig (runtime API base) · comparison.api · import.api
     shops.ts                      per-shop display labels and colour tones
     utils/                        comparisonStats · productImage · showcase · skuLabel
     types/index.ts                mirrors backend DTOs (+ frontend-only types)
     styles/                       dark mobile-suit HUD theme (tokens, layout, motion), mobile-first
   tests/
-scripts/                          docker-build · docker-deploy · scrape-and-import
+mobile/
+  capacitor.config.ts             hybrid shell config (webDir → frontend/dist)
+  android/                        generated Gradle project (APK)
+  ios/                            generated Xcode workspace (IPA, macOS only)
+scripts/                          docker-build · docker-deploy · scrape-and-import · build-mobile · run-android-emulator · run-ios-simulator
 docs/                             see below
 data/                             SQLite (gitignored)
 ```
@@ -740,6 +745,7 @@ data/                             SQLite (gitignored)
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Mermaid: request sequences, class hierarchy, ER diagram, deployment topology |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Runtime requirements, env vars, local dev, Docker, cron chaining |
 | [`docs/TESTING.md`](docs/TESTING.md) | Unit suites, integration matrix, manual-verification log, known caveats |
+| [`docs/MOBILE.md`](docs/MOBILE.md) | Android/iOS hybrid build, runtime server-address setting, signing & cert caveats, mobile test matrix |
 | [`AGENT.md`](AGENT.md) | Original project objective and intended flow |
 
 ---

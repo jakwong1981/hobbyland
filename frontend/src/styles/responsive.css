@@ -1,5 +1,39 @@
 /* frontend/src/styles/responsive.css — small-screen overrides */
 
+/* Notch / gesture-bar safe areas (iOS WebView & fullscreen Android). */
+@supports (padding: env(safe-area-inset-top)) {
+  .app-shell {
+    padding-top: env(safe-area-inset-top);
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .app-shell {
+    padding: 0 14px 48px;
+  }
+
+  .header-controls {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .comparison-table {
+    font-size: 0.88rem;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: 0 12px 40px;
@@ -86,5 +120,25 @@
 
   .gallery-body {
     padding: 9px;
+  }
+
+  /* Touch targets: every interactive control clears 44px. */
+  .nav-btn,
+  .faction-btn,
+  .grade-tabs .tab,
+  .view-toggle .view-btn {
+    min-height: 44px;
+  }
+
+  /* The server panel becomes a bottom sheet on phones. */
+  .server-panel {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
 }

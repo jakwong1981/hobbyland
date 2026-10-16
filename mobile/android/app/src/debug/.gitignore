@@ -1,0 +1,5 @@
+# dev_server_cert.pem is committed on purpose: it is the PUBLIC self-signed dev
+# certificate (a copy of certs/server.pem — the private key lives in
+# certs/server-key.pem, which stays gitignored). Committing it keeps debug builds
+# linkable on a clean checkout; scripts/run-android-emulator.sh refreshes it from
+# certs/server.pem when that file exists.

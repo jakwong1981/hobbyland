@@ -8,7 +8,7 @@ import { logger } from './utils/logger.js';
 
 const config = loadConfig();
 const db = createDatabase(config.DATA_DIR);
-const app = createApp(db);
+const app = createApp(db, undefined, config.CORS_ORIGINS);
 
 const tlsConfigured = Boolean(config.TLS_CERT_PATH) || Boolean(config.TLS_KEY_PATH);
 

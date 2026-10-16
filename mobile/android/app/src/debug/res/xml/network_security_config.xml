@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+            <!-- Committed public dev certificate (copy of certs/server.pem,
+                 refreshed by scripts/run-android-emulator.sh). -->
+            <certificates src="@raw/dev_server_cert" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
