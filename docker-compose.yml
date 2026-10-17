@@ -1,8 +1,10 @@
 services:
   app:
     build: .
+    # 127.0.0.1-only publish keeps the local health check in
+    # scripts/docker-deploy.sh working while never exposing the app publicly
     ports:
-      - "${PORT:-8089}:8089"
+      - "127.0.0.1:${PORT:-8089}:8089"
     environment:
       PORT: 8089
       TLS_CERT_PATH: /certs/server.pem
@@ -12,8 +14,26 @@ services:
       HD_HEADLESS: "1"
       JEV_API_KEY: ${JEV_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-capacitor://localhost,https://localhost,http://localhost}
     volumes:
       - ./data:/data
       - ./certs:/certs:ro
       - ${CSV_DIR:-./data}:/csvs:ro
     restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-jackstudio.app}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

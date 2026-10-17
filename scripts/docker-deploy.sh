@@ -156,4 +156,7 @@ if [ "$IMPORT" -eq 1 ]; then
 fi
 
 echo "==> Deployed: ${APP_URL}"
+if [ -f .env ] && grep -q '^DOMAIN=' .env; then
+  echo "==> Public URL: https://$(sed -n 's/^DOMAIN=//p' .env) (via Caddy, Let's Encrypt)"
+fi
 docker compose ps
