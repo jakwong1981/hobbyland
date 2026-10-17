@@ -17,22 +17,28 @@ hobbyland/
 │       ├── index.ts             # bootstrap: config → db → https/http listen (TLS when certs present)
 │       ├── config.ts            # env validation (zod)
 │       ├── app.ts               # express wiring + static frontend serving
-│       ├── cli/import.ts        # CSV folder/file import CLI (`pnpm import:csv`)
+│       ├── cli/import.ts        # CSV folder/file import CLI (`pnpm import:csv`; fixed-name `pbandai_products.csv` → showcase snapshot)
 │       ├── db/client.ts         # node:sqlite DatabaseSync factory + migrate()
 │       ├── types/index.ts       # DTO contracts (shared shapes)
 │       ├── repositories/product.repository.ts   # SQL only (products, batches, shops)
+│       ├── repositories/pbandai.repository.ts   # SQL only (pbandai_items: replaceAll snapshot + findAll)
 │       ├── services/import.service.ts           # CSV parse/validate + transactional upsert
 │       ├── services/comparison.service.ts       # group-by-SKU + cheapest computation
+│       ├── services/pbandai.service.ts          # pbandai CSV parse (price text → number) + snapshot import
+│       ├── services/scrape.service.ts           # spawns scrape-and-import.sh, tracks job state
 │       ├── controllers/product.controller.ts    # comparisons / products / imports
 │       ├── controllers/import.controller.ts     # multipart CSV upload
+│       ├── controllers/scrape.controller.ts     # POST /api/scrape + GET /api/scrape/status
+│       ├── controllers/pbandai.controller.ts    # GET /api/pbandai
 │       ├── routes/index.ts      # /api router
 │       ├── middleware/error.middleware.ts       # traceId + ApiErrorResponse
 │       └── utils/{logger.ts,app-error.ts}
-│   └── tests/                   # vitest: comparison, import, config, api + scrape.api (supertest)
+│   └── tests/                   # vitest: comparison, import, pbandai.service, config, api + scrape/pbandai.api (supertest)
 ├── frontend/
 │   ├── index.html               # data-faction bootstrap (pre-paint theme) + SPA root
 │   ├── tests/                   # vitest + RTL (jsdom): components, dashboard, faction, sort-filter, api client,
-│   │                            #   comparison-stats, count-up, layout (hero/showcase/gallery/wipe/view toggle)
+│   │                            #   comparison-stats, count-up, layout (hero/showcase/gallery/wipe/view toggle),
+│   │                            #   pbandai-page, server config/settings
 │   └── src/
 │       ├── main.tsx             # React root + QueryClientProvider
 │       ├── App.tsx              # shell + page switch + faction theme owner
@@ -40,13 +46,17 @@ hobbyland/
 │       ├── shops.ts             # SHOP_LABEL / SHOP_SHORT_LABEL / SHOP_TONE / SHOP_MONOGRAM
 │       ├── series.ts            # SERIES_IDS / SERIES_LABEL / seriesLabel — mirrors scripts/jev_series.py SERIES
 │       ├── api/client.ts        # fetch wrapper (apiGet / apiUpload)
-│       ├── api/comparison.api.ts  api/import.api.ts
+│       ├── api/serverConfig.ts  # runtime API base (localStorage override > build-time env > same-origin)
+│       ├── api/comparison.api.ts  api/import.api.ts  api/scrape.api.ts  api/pbandai.api.ts
 │       ├── hooks/useComparisons.ts              # TanStack Query
 │       ├── hooks/useFaction.ts                  # localStorage ↔ <html data-faction>
 │       ├── hooks/useComparisonSort.ts           # client-side title/price sort, missing shop trails
 │       ├── hooks/useImportFreshness.ts          # last-import timestamp per shop, grade-scoped
 │       ├── hooks/usePrefersReducedMotion.ts     # matchMedia listener (cleaned up on unmount)
 │       ├── hooks/useCountUp.ts                  # rAF tween for stat numbers; instant under reduced motion
+│       ├── hooks/useProgressiveRows.ts          # generic progressive row reveal for the galleries
+│       ├── hooks/useScrapeJob.ts                # POST /api/scrape + status polling
+│       ├── hooks/usePbandai.ts                  # TanStack Query over /api/pbandai (single snapshot fetch)
 │       ├── utils/productImage.ts                # first shop (SHOP_CODES order) with a photo
 │       ├── utils/comparisonStats.ts             # summarizeComparisons → hero stat counts
 │       ├── utils/seriesStats.ts                 # countBySeries → series filter options + stat chips
@@ -57,25 +67,29 @@ hobbyland/
 │       ├── components/{ShopLogo,GradeEmblem,MobileSuitArt}.tsx       # inline-SVG logos & original line art
 │       ├── components/{HeroBanner,StatTile,KitShowcase}.tsx          # mission banner + kit photo strip
 │       ├── components/{ViewToggle,ComparisonGallery,ProductImage}.tsx # 表格/圖鑑 switch, card grid, photo w/ fallback
-│       ├── pages/{DashboardPage,ImportPage}.tsx
+│       ├── components/{PbandaiGallery,PbandaiCard}.tsx                # showcase grid + card (PB fallback block)
+│       ├── pages/{DashboardPage,PbandaiPage,ImportPage}.tsx
 │       └── styles/              # index.css imports tokens, base, header, hero, showcase, toolbar,
-│                                #   table, gallery, import, responsive, motion (all animation)
+│                                #   table, gallery, import, pbandai, settings, responsive, motion (all animation)
 └── docs/
 ```
 
 ## 2. Component Dependency Graph
 
 ```
-React pages ──▶ hooks/useComparisons ──▶ api/* ──▶ fetch /api/*
-                                                   │
-Express routes ──▶ controllers ──▶ services ──▶ ProductRepository ──▶ node:sqlite
-                     ▲                                ▲
-               cli/import.ts ──▶ import.service ──────┘
+React pages ──▶ hooks/useComparisons · usePbandai ──▶ api/* ──▶ fetch /api/*
+                                                                  │
+Express routes ──▶ controllers ──▶ services ──▶ ProductRepository · PbandaiRepository ──▶ node:sqlite
+                     ▲                                  ▲
+               cli/import.ts ──▶ import.service ────────┤
+                               └─▶ pbandai.service ─────┘   (fixed-name pbandai_products.csv branch)
 ```
 
 - `product.controller` → `comparison.service` (pure) + `ProductRepository`
 - `import.controller` / `cli/import.ts` → `import.service` → `ProductRepository`
-- Controllers never touch SQL; repository never sees HTTP types.
+- `pbandai.controller` → `PbandaiRepository`; the CLI's pbandai branch → `pbandai.service` →
+  `PbandaiRepository.replaceAll` (whole-snapshot swap)
+- Controllers never touch SQL; repositories never see HTTP types.
 
 ## 3. API Contracts
 
@@ -89,6 +103,9 @@ Errors are `ApiErrorResponse = { code: <httpStatus>, message, data: null, timest
 | GET | `/api/imports/freshness` | `grade?=hg|mg|rg` | `ImportFreshness` |
 | GET | `/api/imports` | — | `ImportBatchDto[]` (latest 20) |
 | POST | `/api/import` | multipart: `file` (CSV), fields `shop`, `grade` | `{ batchId, rowCount, skipped }` (201) |
+| GET | `/api/pbandai` | `q?=text` (matches `name` or `tc_name`) | `PbandaiItem[]` newest-first |
+| POST | `/api/scrape` | — | 202 started / 409 already running |
+| GET | `/api/scrape/status` | — | scrape job state |
 
 ```ts
 ImportFreshness = {
@@ -115,6 +132,19 @@ ComparisonRow = {
 }
 Offer = { shop, price, regularPrice|null, url, stock|null, sellType|null, imageUrl|null }
 ```
+
+```ts
+PbandaiItem = {
+  id: number; name: string; tcName: string | null;
+  price: number | null;            // numeric part of the raw price text; null on N/A
+  status: string | null;           // shop badge text (e.g. PRE-ORDER), when shown
+  url: string; imageUrl: string | null; importedAt: string;
+}
+```
+
+`pbandai_items` has snapshot semantics — each import `DELETE`s and re-inserts the whole table in
+one transaction (`PbandaiRepository.replaceAll`), and rows serve in `id` order, which is the
+listing's newest-first scrape order. It never joins `products`.
 
 `ShopCode` and `Grade` derive from the `SHOP_CODES` / `GRADES` constants, which also drive the zod
 query enums and the importer's `FILE_PATTERN`. Adding a shop is one array entry plus a `shops` seed
@@ -150,3 +180,18 @@ inside the header cell so it stays keyboard-reachable. The header row is frozen:
 the scroll container (`overflow:auto` + `max-height`) and `th` is `position:sticky; top:0` with an
 opaque fill. The table uses `border-collapse:separate; border-spacing:0` because collapsing borders
 are unreliable on a sticky cell; cells only draw bottom/left rules, so the look is unchanged.
+
+## 5. P-Bandai Showcase Page
+
+Reached through the header nav (格價表 ↔ P-Bandai ↔ 匯入) and otherwise independent: one
+`GET /api/pbandai` fetch feeds the whole page, and nothing here touches the comparison queries.
+All controls are client-side over that snapshot.
+
+| Control | State owner | Behaviour |
+|---|---|---|
+| Search box | `PbandaiPage` (`q`) | case-insensitive substring filter on `name` / `tcName` |
+| Status chips | `PbandaiPage` (`status`) | one chip per distinct non-null `status` in the snapshot plus 全部; click selects, clicking the active chip clears. Chips derive from the unfiltered snapshot so filtering never shrinks them |
+| Result count | `PbandaiPage` | `N 件`, or `M / N 件` while a filter is active |
+| Last-update line | `PbandaiPage` | `max(importedAt)` (ISO strings sort lexicographically), formatted `zh-HK` |
+| Card grid | `PbandaiGallery` / `PbandaiCard` | progressive render via `useProgressiveRows`; lazy `referrerPolicy="no-referrer"` image with a「PB」fallback block on error; `tcName ?? name` title + original-name subtitle; `HK$` price hidden when null; status badge; the whole card links to the P-Bandai item page (`target="_blank" rel="noreferrer"`) |
+| Empty state | `PbandaiPage` | 「冇資料 — 請先撳更新或匯入 pbandai_products.csv。」 |

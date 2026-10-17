@@ -7,11 +7,17 @@
 #   scripts/scrape-and-import.sh --docker       # import into the running container instead
 #   scripts/scrape-and-import.sh --docker rg    # both
 #   scripts/scrape-and-import.sh --skip-series  # skip Gundam series classification
+#   scripts/scrape-and-import.sh --skip-pbandai # skip the P-Bandai HK showcase scrape
 #
 # The scraper runs with CSV_DIR as its working directory and writes its fixed-name
 # CSVs there, so the import step reads back exactly what this run produced.
+# HobbyDigi (hd) is disabled by default inside hobbyland_scraper.py — its CSVs
+# from previous runs stay in place and keep re-importing; pass `hd` as a
+# category argument to refresh the shop.
 # Between the two, enrich_series.py classifies every product title into its
 # Gundam series (cached in data/series_cache.json) and adds a `series` column.
+# The P-Bandai scrape (pbandai_scraper_v2.py, Playwright + translation) refreshes
+# the showcase snapshot in pbandai_products.csv; it never feeds price comparison.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,11 +27,13 @@ CSV_OUT_DIR="${CSV_DIR:-$REPO_ROOT/data}"
 
 DOCKER=0
 SKIP_SERIES="${SKIP_SERIES:-0}"
+SKIP_PBANDAI="${SKIP_PBANDAI:-0}"
 CATEGORIES=()
 for arg in "$@"; do
   case "$arg" in
     --docker) DOCKER=1 ;;
     --skip-series) SKIP_SERIES=1 ;;
+    --skip-pbandai) SKIP_PBANDAI=1 ;;
     *)        CATEGORIES+=("$arg") ;;
   esac
 done
@@ -42,6 +50,16 @@ echo "==> Scraping ${CATEGORIES[*]:-all categories} (this can take several minut
 mkdir -p "$CSV_OUT_DIR"
 cd "$CSV_OUT_DIR"
 "$PY" "$SCRIPT_DIR/hobbyland_scraper.py" ${CATEGORIES[@]+"${CATEGORIES[@]}"}
+
+if [ "$SKIP_PBANDAI" -eq 1 ]; then
+  echo "==> Skipping P-Bandai scrape (--skip-pbandai)"
+else
+  # Non-fatal: a P-Bandai outage must never kill the price pipeline. On failure
+  # the previous run's pbandai_products.csv stays in place and re-imports as-is.
+  echo "==> Scraping P-Bandai HK (Playwright + translation; a few minutes)"
+  "$PY" "$SCRIPT_DIR/pbandai_scraper_v2.py" || \
+    echo "⚠️  P-Bandai scrape failed — continuing with shop import"
+fi
 
 cd "$REPO_ROOT"
 if [ "$SKIP_SERIES" -eq 1 ]; then

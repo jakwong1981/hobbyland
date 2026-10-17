@@ -106,3 +106,25 @@ export interface ImportFreshness {
   overall: string | null;
   byShop: Record<ShopCode, string | null>;
 }
+
+// P-Bandai HK showcase — a snapshot of the current p-bandai.com/hk listing,
+// deliberately separate from products so it never joins price comparison.
+export interface PbandaiItem {
+  id: number;
+  name: string;
+  tcName: string | null;
+  price: number | null;
+  status: string | null;
+  url: string;
+  imageUrl: string | null;
+  importedAt: string;
+}
+
+export interface PbandaiCsvRecord {
+  name: string;
+  tcName: string | null;
+  price: number | null;
+  status: string | null;
+  url: string;
+  imageUrl: string | null;
+}

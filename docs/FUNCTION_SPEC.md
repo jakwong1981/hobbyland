@@ -35,6 +35,21 @@
    the fetched rows client-side (options carry per-series counts; 未分類 appears only when some row
    is unclassified), and a per-series stat chip strip computed from the visible rows
    (`countBySeries`). Clicking a chip filters to that series; clicking the active chip clears it.
+7. `scripts/pbandai_scraper_v2.py` (run by `scrape-and-import.sh` after the shop scrape, guarded
+   non-fatal; skip with `--skip-pbandai`) scrapes the P-Bandai HK shop — Playwright over the shop
+   page and the Gunpla search listing (`NewArrival` sort), capturing each card's name, price,
+   status, URL and **image URL**, with names translated to Chinese (online first, offline
+   Helsinki-NLP fallback). It writes the fixed-name `pbandai_products.csv` (`name, tc_name, price,
+   status, url, image`). The import CLI routes that basename to the showcase pipeline, which
+   **replaces** `pbandai_items` wholesale in one transaction — the scrape is a snapshot of the
+   current catalogue, so closed pre-orders must disappear and there is no JAN identity to upsert
+   against.
+8. The「P-Bandai」page queries `GET /api/pbandai?q=` and renders the snapshot newest-first (the
+   listing's `NewArrival` order survives as row-id order, so no sort column exists) as a card
+   gallery: photo, 中文/原名 title, price, status badge, whole card linking to the item page.
+   Search and the status filter chips (derived from the fetched snapshot) are client-side. The
+   page is display-only — it never feeds the comparison grid, and the two pages cross-link only
+   through the header nav.
 
 ## 2. Validation Rules
 
@@ -79,6 +94,11 @@ partial scrape (`scrape-and-import.sh rg`) followed by the importer's whole-dire
 silently strip every image for the un-scraped grades. Import batches are append-only audit records.
 A shop delisting a product does not delete the row (last known price persists); full replacement
 semantics can be added later if needed.
+
+`pbandai_items` is the deliberate opposite: every import is `DELETE` + re-insert of the whole
+snapshot in one transaction. A P-Bandai listing that closed **must** leave the page, and with no
+JAN/SKU identity there is nothing stable to upsert against. On a failed P-Bandai scrape the
+previous run's CSV simply re-imports (same rows, refreshed `imported_at`).
 
 ## 5. Boundary Conditions & Error Recovery
 

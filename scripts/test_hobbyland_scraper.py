@@ -827,5 +827,21 @@ class TwinnerResolveTest(unittest.TestCase):
             hs.twinner_exclusive_sku(resolved[0]["url"]), "TM:limited-kit")
 
 
+class DefaultCategoriesTest(unittest.TestCase):
+    """HobbyDigi is off the default run (user request 2026-10-17); `hd` explicit still works."""
+
+    def _all_cats(self):
+        return {**hs.CATEGORIES, **hs.ANIME_PRO_CATEGORIES, **hs.HOBBYDIGI_CATEGORIES,
+                **hs.FOOKLE_CATEGORIES, **hs.TWINNER_CATEGORIES}
+
+    def test_hobbydigi_is_off_the_default_run(self):
+        self.assertNotIn("hd", hs.default_categories(self._all_cats()))
+
+    def test_every_other_shop_stays_on_the_default_run(self):
+        default = hs.default_categories(self._all_cats())
+        for key in ("hg", "mg", "rg", "ap_hg", "ap_mg", "ap_rg", "fm", "tm"):
+            self.assertIn(key, default)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

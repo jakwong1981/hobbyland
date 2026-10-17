@@ -179,6 +179,17 @@ TWINNER_CATEGORIES = {"tm": (TWINNER_SHOP_CODE, TWINNER_GRADE_COLLECTIONS)}
 TWINNER_PER_PAGE = 250     # products.json maximum page size
 TWINNER_MAX_PAGES = 20     # safety guard; the real total is discovered at runtime
 
+# HobbyDigi is off the default run (user request, 2026-10-17): its headed,
+# Cloudflare-fighting crawl is the pipeline's slowest and most fragile leg.
+# The shop's previously imported rows stay in the database untouched; pass
+# `hd` explicitly to refresh them.
+DISABLED_BY_DEFAULT = frozenset({"hd"})
+
+
+def default_categories(all_cats):
+    """Category keys a bare `hobbyland_scraper.py` run scrapes."""
+    return [k for k in all_cats if k not in DISABLED_BY_DEFAULT]
+
 # Bandai decals, water-slide transfers and tools share the HG/MG/RG categories
 # but are not model kits; skipping them keeps the comparison about kits. An
 # unmatched accessory would otherwise just clutter the dashboard as a
@@ -1975,7 +1986,7 @@ def main(argv):
     all_cats = {**CATEGORIES, **ANIME_PRO_CATEGORIES, **HOBBYDIGI_CATEGORIES,
                 **FOOKLE_CATEGORIES, **TWINNER_CATEGORIES}
 
-    # Optional argv selects categories; default = all
+    # Optional argv selects categories; default = all enabled categories
     keys = [arg.lower() for arg in argv]
     unknown = [k for k in keys if k not in all_cats]
     if unknown:
@@ -1983,7 +1994,11 @@ def main(argv):
         print(f"   Available: {', '.join(all_cats)}")
         return 2
     if not keys:
-        keys = list(all_cats)
+        keys = default_categories(all_cats)
+        skipped = [k for k in all_cats if k in DISABLED_BY_DEFAULT]
+        if skipped:
+            print(f"⏭️  Disabled by default: {', '.join(skipped)} "
+                  f"(pass explicitly to scrape)\n")
 
     exit_code = 0
     for key in keys:

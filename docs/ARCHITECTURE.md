@@ -172,10 +172,21 @@ erDiagram
         int batch_id FK
         text imported_at
     }
+    pbandai_items {
+        int id PK
+        text name
+        text tc_name
+        real price
+        text status
+        text url UK
+        text image_url
+        text imported_at
+    }
 ```
 
 `UNIQUE (shop_id, sku, grade)` is the upsert key; indexes on `sku` and `grade` back the
-comparison query.
+comparison query. `pbandai_items` stands alone: it feeds the showcase page only, has no JAN
+identity, and each import replaces the whole table in one transaction.
 
 ## 5. Deployment Topology
 
@@ -183,7 +194,9 @@ comparison query.
 flowchart LR
     subgraph Host
         CRON[cron job] --> SCR[hobbyland_scraper.py]
-        SCR --> CSV[(up to 15 CSV files)]
+        CRON --> PBS[pbandai_scraper_v2.py]
+        SCR --> CSV[(up to 15 shop CSVs + pbandai_products.csv)]
+        PBS --> CSV
         CSV --> CLI[pnpm import:csv]
         subgraph Docker container :8089
             BE[Express backend<br/>node:24-slim] --> DB[(SQLite /data volume)]

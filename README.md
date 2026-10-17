@@ -69,6 +69,7 @@ Secondary goals:
 | **Showcase marquee** | Auto-scrolling strip of kits that have photos, each linking to its cheapest offer |
 | **Table / gallery toggle** | The grid flips to a card gallery marking the winning shop; shop filter and search still apply |
 | **CSV import** | Upload through the「匯入」page, or bulk-import a folder via CLI |
+| **P-Bandai showcase** | A separate「P-Bandai」page cards the HK P-Bandai shop's current catalogue (photo, price, status, link to the item) — display-only, it never feeds the comparison grid |
 | **Theme** | Dark HUD cockpit skin, switchable between 聯邦 (Federation) and 自護 (Zeon) palettes; the choice persists across reloads |
 
 ---
@@ -95,7 +96,8 @@ Secondary goals:
 | `pino` | 9.6.0 | Structured JSON logs |
 | `tsx` / `vitest` / `supertest` | dev | Watch mode, unit + API-level tests |
 
-No ORM. SQL is hand-written and confined to `ProductRepository`. The schema in
+No ORM. SQL is hand-written and confined to the repositories (`ProductRepository`,
+`PbandaiRepository`). The schema in
 `backend/drizzle/0000_init.sql` is `CREATE TABLE IF NOT EXISTS` DDL executed on every boot, plus one
 in-place guard that adds `image_url` to databases created before that column existed — so an
 existing `data/hobbyland.db` upgrades itself rather than failing.
@@ -110,7 +112,7 @@ existing `data/hobbyland.db` upgrades itself rather than failing.
 | `@testing-library/react` / `jsdom` / `vitest` | dev | Component and hook tests |
 
 Local UI state stays in `useState`; only server data goes through React Query. No global store —
-the app has exactly two pages and one shared preference (the faction theme).
+the app has exactly three pages and one shared preference (the faction theme).
 
 ---
 
@@ -123,10 +125,10 @@ Strict one-way layering; skipping a layer is not done anywhere in the codebase.
 ```mermaid
 flowchart TD
     subgraph FE["Frontend (React 18 + Vite)"]
-        P["pages/ DashboardPage · ImportPage"]
-        H["hooks/ useComparisons · useComparisonSort · useFaction"]
-        C["components/ ComparisonTable · CheaperBadge · ShopFilter · FactionToggle"]
-        A["api/ client · comparison.api · import.api"]
+        P["pages/ DashboardPage · PbandaiPage · ImportPage"]
+        H["hooks/ useComparisons · useComparisonSort · useFaction · usePbandai"]
+        C["components/ ComparisonTable · CheaperBadge · ShopFilter · FactionToggle · PbandaiCard"]
+        A["api/ client · comparison.api · import.api · pbandai.api"]
         P --> H --> A
         P --> C
     end
@@ -134,21 +136,23 @@ flowchart TD
     subgraph BE["Backend (Express)"]
         R["routes/"]
         CTRL["controllers/ — routing, zod validation, status codes"]
-        SVC["services/ — comparison.service (pure) · import.service"]
-        REPO["repositories/ ProductRepository — the only SQL"]
+        SVC["services/ — comparison.service (pure) · import.service · scrape.service · pbandai.service"]
+        REPO["repositories/ ProductRepository · PbandaiRepository — the only SQL"]
         MW["middleware/ traceId · notFound · error"]
         R --> CTRL --> SVC --> REPO
         R --> MW
     end
 
-    DB[("SQLite — products · shops · import_batches")]
+    DB[("SQLite — products · shops · import_batches · pbandai_items")]
     CLI["cli/import.ts"]
     SCRAPE["scripts/hobbyland_scraper.py"]
+    PBSC["scripts/pbandai_scraper_v2.py"]
 
     A -->|"fetch /api/*"| R
     REPO --> DB
     CLI --> SVC
-    SCRAPE -->|"up to 12 CSV files"| CLI
+    SCRAPE -->|"up to 15 CSV files"| CLI
+    PBSC -->|"pbandai_products.csv (snapshot)"| CLI
 ```
 
 - Controllers never see SQL; the repository never sees HTTP types.
@@ -219,6 +223,8 @@ products(id, shop_id FK, sku, grade, title, price,
          regular_price, url, stock, sell_type,
          image_url, batch_id FK, imported_at,
          UNIQUE (shop_id, sku, grade))              -- the upsert key
+pbandai_items(id, name, tc_name, price, status,
+              url UNIQUE, image_url, imported_at)   -- showcase snapshot; whole-table replace per import
 ```
 
 - **Identity is the 13-digit JAN barcode** (`sku`), extracted from the product title for Animes-Pro
@@ -230,6 +236,9 @@ products(id, shop_id FK, sku, grade, title, price,
 - Rows without a JAN (e.g. non-Gunpla figures in Animes-Pro's MG collection) are skipped at import —
   they can never match across shops, so storing them would only add noise. 103 of 246 rows in
   `animes-pro_mg.csv` fall into this category.
+- `pbandai_items` feeds the showcase page only. It has no JAN identity to upsert against, so each
+  import replaces the whole table in one transaction — a closed pre-order disappears instead of
+  lingering at its last known state (the opposite of the `products` rule above).
 
 ### 4.4 Import semantics
 
@@ -261,6 +270,7 @@ A shop delisting a product does **not** delete the row; the last known price per
 | Grade, search text | `DashboardPage` | **Server-side** (`?grade=`, `?q=`) — refetches |
 | Last-update readout | `useImportFreshness` | **Server-side** (`?grade=`) — refetches with the grade |
 | Shop filter, column sort | `DashboardPage` / `useComparisonSort` | **Client-side** — no extra round trip |
+| P-Bandai search + status chips | `PbandaiPage` | **Client-side** over one `GET /api/pbandai` snapshot |
 | Faction theme | `useFaction` | `localStorage` → `<html data-faction>` |
 
 One `GET /api/comparisons?grade=&q=` response (≤ 700 rows) feeds sorting and filtering, so those
@@ -304,7 +314,7 @@ Two CSS details that are load-bearing rather than cosmetic:
 corepack enable
 pnpm install
 pnpm build          # type-check + build both packages
-pnpm test           # backend 56 + frontend 91
+pnpm test           # backend 71 + frontend 118
 pnpm dev            # backend :8089 (tsx watch) + frontend :5173 (vite, /api proxied)
 ```
 
@@ -325,16 +335,19 @@ pnpm build && pnpm start        # https://localhost:8089 (http when ./certs is a
 ```mermaid
 flowchart LR
     CRON["cron 06:00"] --> SC["hobbyland_scraper.py"]
+    CRON --> PBSC["pbandai_scraper_v2.py"]
     SC -->|"HTTP API"| HL["Hobbyland Vue SPA backend"]
     SC -->|"Playwright + Chromium"| AP["Animes-Pro (Shopify)"]
     SC -->|"Playwright, headed, fresh context per page"| HD["HobbyDigi (Magento + Cloudflare)"]
     SC -->|"WooCommerce Store API"| FM["Fookle Model (WooCommerce)"]
     SC -->|"Playwright warm-up, then in-page products.json fetch"| TM["Twinner Model (Shopify)"]
-    HL --> CSV[("up to 15 CSV files")]
+    PBSC -->|"Playwright + translation"| PBA["P-Bandai HK: shop page + model-kits category + search top-up"]
+    HL --> CSV[("up to 15 shop CSVs + pbandai_products.csv")]
     AP --> CSV
     HD --> CSV
     FM --> CSV
     TM --> CSV
+    PBA --> CSV
     CSV -->|"pnpm import:csv"| DB[("SQLite")]
     DB --> UI["Dashboard :8089"]
 ```
@@ -349,7 +362,10 @@ The scraper lives in this repository at `scripts/hobbyland_scraper.py` and runs 
   `__shopify_bv_challenge` URL and `/products.json` hard-429s scripted clients. A real Chromium
   solves the challenge, then listing pages are walked and product cards read from the DOM
   (handling lazy-load `data-src` / `srcset`, protocol-relative `//`, and `{width}` templates).
-- **HobbyDigi** is Magento 2 behind Cloudflare. See below.
+- **HobbyDigi** is Magento 2 behind Cloudflare. **Disabled by default since 2026-10-17** — its
+  headed, challenge-fighting crawl is the pipeline's slowest leg; previously imported rows stay in
+  the database and re-import from the existing CSVs. Pass `hd` explicitly to
+  `hobbyland_scraper.py` to refresh the shop. See below.
 - **Fookle Model** is a plain WooCommerce store with an open JSON Store API
   (`/wp-json/wc/store/v1/products`), so it needs no browser and clears no bot challenge: the grade is
   fixed by the category id (`hg`=27, `mg`=35, `rg`=32), prices are integer minor units, and it
@@ -358,6 +374,14 @@ The scraper lives in this repository at `scripts/hobbyland_scraper.py` and runs 
   interactive challenge: one warmed Playwright page unlocks same-origin `products.json` fetches,
   which carry the JAN as the handle, the vendor, per-variant availability and HKD prices — no DOM
   parsing at all. See [Twinner Model matching](#twinner-model-matching).
+- **P-Bandai HK** (`pbandai_scraper_v2.py`, a separate script run by the same pipeline) reads the
+  official shop page, the **model-kits category page** (`/hk/category/model-kits?limit=100` — the
+  full catalogue; the site's default view keeps only 可訂購 Available + 即將訂購 Upcoming items)
+  and the bot-protected Gunpla search listing as a top-up, all with Playwright. Card extraction
+  skips the `.o-items-carousel` RECOMMENDATIONS rail so captures match the site's result counter
+  exactly. The script captures each card's image URL,
+  translates names to Chinese (online first, offline Helsinki-NLP fallback), and writes the
+  fixed-name `pbandai_products.csv`. Its rows feed the showcase page only, never the comparison.
 
 CSV contract (UTF-8 BOM):
 
@@ -377,7 +401,9 @@ pnpm import:csv -- --file /path/to/hobbyland_hg.csv    # single file
 actionable error rather than guessing a location. Filenames must match
 `<shop>_<grade>.csv` for a shop in `SHOP_CODES` and a grade in `GRADES` — the pattern is derived
 from those constants, so adding a shop needs no second edit. The shop and grade are taken from the
-filename.
+filename. One fixed-name exception: `pbandai_products.csv` routes to the showcase pipeline
+(`importPbandaiItems`) and **replaces** `pbandai_items` wholesale, because the scrape is a snapshot
+of the current P-Bandai catalogue.
 
 > `pnpm import:csv` delegates through `pnpm --filter backend`, so the process CWD is `backend/`.
 > Pass an **absolute** `--dir`; a relative one resolves against `backend/` and fails with `ENOENT`.
@@ -391,7 +417,12 @@ scripts/scrape-and-import.sh hd              # hobbydigi (needs DEEPSEEK_API_KEY
 scripts/scrape-and-import.sh fm              # fooklemodel (needs data/hobbyland.db, no API key)
 scripts/scrape-and-import.sh tm              # twinnermodel (needs data/hobbyland.db + Playwright)
 scripts/scrape-and-import.sh --docker        # import into the running container
+scripts/scrape-and-import.sh --skip-pbandai  # skip the P-Bandai showcase scrape
 ```
+
+The P-Bandai step is **non-fatal**: a P-Bandai outage logs a warning and the shop import carries
+on (the previous run's `pbandai_products.csv` re-imports as-is), so the price pipeline can never
+be killed by the showcase scrape.
 
 ### HobbyDigi matching
 
@@ -598,6 +629,21 @@ All responses use one envelope:
 | `GET` | `/api/imports/freshness` | `grade?=hg\|mg\|rg` | `ImportFreshness` |
 | `GET` | `/api/imports` | — | latest 20 `ImportBatchDto[]` |
 | `POST` | `/api/import` | multipart `file` (CSV) + fields `shop`, `grade` | `{ batchId, rowCount, skipped }` (201) |
+| `GET` | `/api/pbandai` | `q?=text` | `PbandaiItem[]`, newest first |
+| `POST` | `/api/scrape` | — | 202 started / 409 already running |
+| `GET` | `/api/scrape/status` | — | scrape job state |
+
+```ts
+PbandaiItem = {
+  id: number, name: string, tcName: string | null,
+  price: number | null,             // parsed from "HK$450.00"; null on N/A
+  status: string | null,            // e.g. PRE-ORDER badge text, when the shop shows one
+  url: string, imageUrl: string | null, importedAt: string,
+}
+```
+
+`/api/pbandai` serves the showcase snapshot in `id` order — the listing is scraped newest-first
+(`NewArrival` sort), so no explicit sort column is needed. `q` matches `name` or `tc_name`.
 
 ```ts
 ImportFreshness = {
@@ -657,7 +703,7 @@ in-container import; `./certs:/certs:ro` provides the TLS certificate.
 ## 10. Testing
 
 ```bash
-pnpm test        # backend 56/56 · frontend 91/91
+pnpm test        # backend 71/71 · frontend 118/118
 ```
 
 | Suite | Environment | Covers |
@@ -667,6 +713,8 @@ pnpm test        # backend 56/56 · frontend 91/91
 | `api.test.ts` | node + supertest | All five endpoints, status codes, `traceId` on validation failure, freshness scoping by grade and the unscoped case |
 | `config.test.ts` | node | `PORT` default 8089, `./certs` TLS fallback (both files, one file, explicit env wins), lone TLS path pass-through, out-of-range port rejected |
 | `scrape.api.test.ts` | node + supertest | Scrape-job lifecycle: idle status, run + 409 on concurrent start, failure exit code surfaced, missing script → 500 |
+| `pbandai.service.test.ts` | node + in-memory SQLite | P-Bandai CSV parsing (BOM, `HK$450.00` → 450, `N/A` → null, name/url required), `replaceAll` snapshot semantics (a second import replaces; closed items vanish), q filter on name/tc_name |
+| `pbandai.api.test.ts` | node + supertest | `GET /api/pbandai` envelope and field mapping, empty DB → `[]`, q filter |
 | `components.test.tsx` | jsdom + RTL | Badge wording (including that an exclusive SKU never renders「最平」), preview image and its error fallback, pre-order flag, `FreshnessBar` states (every shop listed, one or more missing, no history, loading, failed), tabs, search |
 | `sort-filter.test.tsx` | jsdom + RTL | Sort hook (ordering, nulls-last, non-mutation), `aria-sort`, shop filter (option count derived from `SHOP_CODES.length + 1`), filtered counts, filter-specific empty state |
 | `faction.test.tsx` | jsdom + RTL | Theme default, persistence across mounts, `<html data-faction>` mirroring, unknown-value fallback |
@@ -677,6 +725,7 @@ pnpm test        # backend 56/56 · frontend 91/91
 | `series-stats.test.ts` / `series-filter.test.tsx` | jsdom + RTL | `countBySeries` / `seriesLabel`; series select narrows the table with `M / N` counts, 未分類 filter, stat-chip toggle |
 | `without-shop.test.ts` | jsdom | `withoutShop` — offer removal, verdict re-derivation (exclusive / tie / drop), offer re-sorting, image selection skipping omitted shops |
 | `scrape-button.test.tsx` | jsdom + RTL | Dashboard scrape button — trigger, disabled while processing, re-enable on completion, error surfacing |
+| `pbandai-page.test.tsx` | jsdom + RTL | P-Bandai page: cards render (lazy/no-referrer image, item link), PB fallback block on image error, search + status chips narrow the grid, empty state, App nav 格價表 ↔ P-Bandai round trip |
 
 The database is a **fresh in-memory SQLite per test** — SQL runs for real rather than being mocked
 away. `fetch` is stubbed per test and React Query retries are disabled.
@@ -699,9 +748,9 @@ backend/
     app.ts                        express wiring + SPA static serving
     config.ts                     zod-validated env
     routes/                       /api router + multer upload
-    controllers/                  product · import
-    services/                     comparison (pure) · import
-    repositories/                 ProductRepository — the only SQL
+    controllers/                  product · import · scrape · pbandai
+    services/                     comparison (pure) · import · scrape · pbandai
+    repositories/                 ProductRepository · PbandaiRepository — the only SQL
     middleware/                   traceId · notFound · error
     cli/import.ts                 bulk CSV importer
     utils/                        logger (pino) · AppError
@@ -711,15 +760,18 @@ frontend/
   index.html                      pre-paint faction bootstrap
   src/
     App.tsx                       shell + page switch + theme owner
-    pages/                        DashboardPage · ImportPage
+    pages/                        DashboardPage · PbandaiPage · ImportPage
     components/                   ComparisonTable · ComparisonGallery · CheaperBadge ·
                                   ShopFilter · FreshnessBar · GradeTabs · SearchBar ·
                                   ViewToggle · HeroBanner · KitShowcase · StatTile ·
                                   ProductImage · ShopLogo · GradeEmblem · MobileSuitArt ·
-                                  FactionToggle · FactionCrest · FactionWipe · ServerSettings
+                                  FactionToggle · FactionCrest · FactionWipe · ServerSettings ·
+                                  PbandaiGallery · PbandaiCard
     hooks/                        useComparisons · useComparisonSort · useFaction ·
-                                  useImportFreshness · useCountUp · usePrefersReducedMotion
-    api/                          client · serverConfig (runtime API base) · comparison.api · import.api
+                                  useImportFreshness · useCountUp · usePrefersReducedMotion ·
+                                  useProgressiveRows · useScrapeJob · usePbandai
+    api/                          client · serverConfig (runtime API base) · comparison.api ·
+                                  import.api · scrape.api · pbandai.api
     shops.ts                      per-shop display labels and colour tones
     utils/                        comparisonStats · productImage · showcase · skuLabel
     types/index.ts                mirrors backend DTOs (+ frontend-only types)

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { DashboardPage } from './pages/DashboardPage';
 import { ImportPage } from './pages/ImportPage';
+import { PbandaiPage } from './pages/PbandaiPage';
 import { FactionCrest } from './components/FactionCrest';
 import { FactionToggle } from './components/FactionToggle';
 import { FactionWipe } from './components/FactionWipe';
@@ -9,7 +10,7 @@ import { ServerSettings } from './components/ServerSettings';
 import { useFaction } from './hooks/useFaction';
 import { DASHBOARD_SHOPS, SHOP_LABEL } from './shops';
 
-type Page = 'dashboard' | 'import';
+type Page = 'dashboard' | 'pbandai' | 'import';
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
@@ -41,6 +42,12 @@ export default function App() {
               格價表
             </button>
             <button
+              className={page === 'pbandai' ? 'nav-btn active' : 'nav-btn'}
+              onClick={() => setPage('pbandai')}
+            >
+              P-Bandai
+            </button>
+            <button
               className={page === 'import' ? 'nav-btn active' : 'nav-btn'}
               onClick={() => setPage('import')}
             >
@@ -49,7 +56,11 @@ export default function App() {
           </nav>
         </div>
       </header>
-      <main>{page === 'dashboard' ? <DashboardPage /> : <ImportPage />}</main>
+      <main>
+        {page === 'dashboard' && <DashboardPage />}
+        {page === 'pbandai' && <PbandaiPage />}
+        {page === 'import' && <ImportPage />}
+      </main>
     </div>
   );
 }

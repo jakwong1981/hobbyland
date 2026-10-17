@@ -107,7 +107,27 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | 4 | Custom `CORS_ORIGINS` list | listed origin allowed, default WebView origins rejected |
 | 5 | Default origins constant | covers both WebView schemes (`capacitor://localhost`, `https://localhost`) |
 
-### Frontend (`frontend/tests/`, 111 tests)
+### pbandai.service.test.ts (7 tests, node + in-memory SQLite)
+
+| # | Case | Asserts |
+|---|---|---|
+| 1 | BOM header + image column | row parsed; `tcName` / `price = 450` / `status` / `url` / `imageUrl` all mapped |
+| 2 | Raw price text | `"HK$1,280.50"` → `1280.5`; `N/A` → `null` |
+| 3 | Rows missing name or url | both skipped (`skipped = 2`, 0 records) |
+| 4 | CSV exported before the image column existed | tolerated; `imageUrl = null` |
+| 5 | Import then read back | `rowCount = 2`, rows returned in insert order, `importedAt` stamped |
+| 6 | Second import replaces the snapshot | closed pre-order vanishes — 1 row left, no duplicate |
+| 7 | `findAll(q)` | matches on `name` or `tc_name` (English and Chinese) |
+
+### pbandai.api.test.ts (3 tests, supertest + in-memory DB)
+
+| # | Endpoint | Case | Expected |
+|---|---|---|---|
+| 1 | GET /api/pbandai | snapshot after a service-level import | 200, envelope `code = 0`, import order kept, snake→camel field mapping, missing image → `imageUrl: null` |
+| 2 | GET /api/pbandai | empty database | 200, `data = []` |
+| 3 | GET /api/pbandai | `?q=乙` | 200, only the row whose `tc_name` matches |
+
+### Frontend (`frontend/tests/`, 118 tests)
 
 | File | Cases |
 |---|---|
@@ -125,6 +145,7 @@ Run: `pnpm test` (from repo root) or `cd backend && pnpm test` / `cd frontend &&
 | client.test.ts (3) | api client base-URL resolution (same-origin relative paths by default; effective base resolved **per request** so a settings change applies without reload; `ApiError` with the server message on non-2xx) |
 | server-config.test.ts (10) | `normalizeApiBase` (trailing slashes stripped, empty string = same-origin, rejects non-http schemes / paths / junk); `getApiBase` precedence (stored override > build-time env > same-origin); `setApiBase`/`clearApiBase` (normalized persistence, invalid URL throws and persists nothing, clear restores build default, **a failed localStorage write keeps the override effective for the session via the in-memory mirror**) |
 | server-settings.test.tsx (7) | `ServerSettings` panel (same-origin default shown, save persists a normalized URL, invalid URL rejected without persisting, 測試 hits `/api/imports/freshness` against the candidate URL with ✓/✗ display, failure message surfaced, reset restores the build default, **saving resets the React Query cache so mounted queries refetch from the new server**) |
+| pbandai-page.test.tsx (7) | `fetchPbandaiItems` query-string building; `PbandaiPage` (cards render from the snapshot — lazy `no-referrer` image, whole card links to the item page, PB fallback block on image error; search narrows via `tcName`; status chip filters + 全部 resets; empty state); `App` nav switches 格價表 → P-Bandai → back |
 
 `fetch` is stubbed per test; `QueryClient` retries are disabled. `tests/fixtures.ts` exports
 `stubApi(comparisons, freshness?)`, which routes on the requested URL — the dashboard issues two
@@ -132,7 +153,7 @@ queries, so a single-payload stub would answer the freshness request with a comp
 
 `tests/setup.ts` also installs a `window.matchMedia` stub (jsdom has none) returning `matches: false`.
 
-Current status: **backend 61/61, frontend 111/111 passing**; Python `scripts/test_*.py` 200/200 (incl. `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 49: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**); `pnpm build` clean under strict TS.
+Current status: **backend 71/71, frontend 118/118 passing**; Python `scripts/test_*.py` 212/212 (incl. `test_pbandai_scraper_v2.py` 7: `save_csv` writes the image column, a card without an image exports an empty cell, JSON round-trip keeps the image, `_split_delivery_suffix` splits/strips delivery notes, `CATEGORY_URL` pins the model-kits listing at `limit=100`, `EXTRACT_JS` skips the `.o-items-carousel` RECOMMENDATIONS rail; `test_enrich_series.py`: file matching, cache round-trip, title dedupe across CSVs, cache hits skip the API, failures leave `series` empty and uncached, dead key still writes cache-only results, stale series refreshed; and `test_hobbyland_scraper.py` 51: fresh-browser retry per page, Turnstile widget located through the frame list rather than a selector, passive-canvas geometry fallback, CDP hover/press/release sequence and detach, re-measurement after a re-armed widget, click budget, ghost-click failure never prompting without a TTY, headed default plus `HD_HEADLESS` and the automation-flag launch arg, `cf_clearance` jar save/replay and a challenged jar never overwriting a working one, **twinnermodel kit filter / row mapping / sell-type / provisional key / products.json fetch + 429 retry / JAN order-of-trust**, **`hd` dropped from the default category run while the other shops stay**); `pnpm build` clean under strict TS.
 
 ## 2. Functional / Integration Test Matrix
 
@@ -169,8 +190,55 @@ Current status: **backend 61/61, frontend 111/111 passing**; Python `scripts/tes
 | IT-23 | Fookle `FM:` provisional replaced | a fookle kit stored under `FM:<slug>` | re-import `fookle_hg.csv` after the kit resolves a real JAN | one row for that URL, keyed by the JAN — no `FM:` duplicate | `deleteProvisionalByUrl` deletes any `<PREFIX>:` sku for the URL (covered by `import.service.test.ts` case 15) |
 | IT-24 | Twinnermodel scrape + import | `data/hobbyland.db` present, Playwright installed | `hobbyland_scraper.py tm` then `pnpm import:csv` | `twinnermodel_{hg,mg,rg}.csv` written; batches recorded for shop `twinnermodel` | every kit's JAN comes from the handle (report `JAN from handle` ≈ all rows); dashboard badges「Twinnermodel 最平」/「只有 Twinnermodel 有貨」on real data |
 | IT-25 | Twinnermodel no circular matching | twinnermodel rows already imported | re-run `tm` | the report's `catalogue size` excludes twinnermodel's, fookle's **and** hobbydigi's own rows | `JanCatalogue.from_database(..., exclude_shops=('twinnermodel','fookle','hobbydigi'))` |
+| IT-26 | P-Bandai snapshot import | `pbandai_products.csv` in the import dir | `pnpm import:csv -- --dir <abs path>`, then `GET /api/pbandai` | one `pbandai_items` row per CSV record, in CSV order; price parsed from the raw text; image URL stored | re-import with a row removed leaves **fewer** rows (whole-table replace, no upsert); shop CSVs in the same dir still import normally |
 
 ## 3. Manual Verification Performed
+
+### 2026-10-17 — enhancement 8 (P-Bandai HK showcase page)
+
+- Full suite: `pnpm test` → **backend 71/71, frontend 118/118**; Python **208/208**
+  (`scripts/venv/bin/python -m unittest discover -s scripts -p 'test_*.py'`, incl. the new
+  `test_pbandai_scraper_v2.py` 5/5 — later 7/7 under the 210/210 total once the model-kits
+  category source landed, see below); `pnpm build` clean under strict TS on both packages;
+  `bash -n` clean on `scrape-and-import.sh`.
+- Import CLI verified end-to-end in a scratch dir: `pbandai_products.csv` (2 rows) imported →
+  `pbandai_items` holds 2 rows in CSV order with `price` parsed (`HK$450.00` → 450, `N/A` → null)
+  and `image_url` stored; a shop CSV in the same directory still takes the shop/grade path;
+  re-import after removing a row leaves 1 row (snapshot replace, no duplicates).
+- `GET /api/pbandai` on the seeded in-memory app returns the shared envelope with rows in import
+  (newest-first) order; `?q=` matches both `name` and `tc_name`; empty DB → `[]` (covered by
+  `pbandai.api.test.ts`).
+- `--skip-pbandai` leaves the pipeline byte-identical to before; the default P-Bandai step is
+  guarded non-fatal (`|| echo ⚠️ …`) so a P-Bandai outage cannot abort the shop import under
+  `set -euo pipefail` — on failure the previous `pbandai_products.csv` re-imports as-is.
+- Live P-Bandai scrape + dashboard rendering of the new page not yet re-verified in a browser
+  at this point (superseded by the next entry for the scrape; the visual pass remains open);
+  the page-level behaviour is pinned by `pbandai-page.test.tsx` (7 tests) against a stubbed query.
+
+### 2026-10-17 — P-Bandai model-kits category source (37 → 63 件)
+
+- Prompt: the model-kits category page shows「63 results」, but the showcase snapshot only had 37
+  — the bot-protected search endpoint had failed on the last run, leaving shop-page rows only.
+- Live probing (Playwright MCP): `/hk/category/model-kits` is the same 04-004 listing as the
+  search URL, server-200 and not bot-protected; its default view = SALES STATUS「Available
+  Items (63) + Upcoming Items (0)」, with「No Longer Available (3226)」filtered out by the site.
+  Both listing pages render 71 cards for 63 results — the extra 8 are the `.o-items-carousel`
+  RECOMMENDATIONS rail, now excluded in `EXTRACT_JS`.
+- Scraper now crawls shop page → category page (`?limit=100`, one page for 63) → search top-up,
+  via the extracted `_crawl_listing` helper. Live run: **63 products captured** (= the site's
+  counter), all with price + image; Python suite 210/210.
+- `pnpm import:csv` → `pbandai_products.csv: imported 63, skipped 0`; `pbandai_items` holds 63
+  rows (0 missing image / price).
+- **Ops note:** the Docker container bind-mounts `./data`, but its long-lived SQLite connection
+  kept serving the pre-import 37 rows until `docker compose restart app` — after a host-side
+  import, restart the container (or use `scrape-and-import.sh --docker`, which recreates it).
+  Post-restart `GET /api/pbandai` serves all 63 items.
+- Page verified live via `pnpm dev` (vite :5173 → proxied API): 63 cards, 「63 件」, status chips
+  全部/PRE-ORDER, lazy images loading per viewport — desktop + 390px device widths.
+- Follow-ups the same day: the hero gained a decorative booth illustration
+  (`frontend/src/assets/pbandai-hero.jpg`, downscaled 2752→1600px, 3.6MB→540KB, `alt=""`), and
+  HobbyDigi (`hd`) moved behind `DISABLED_BY_DEFAULT` in `hobbyland_scraper.py` — a bare run
+  scrapes the other four shops and prints the skip notice; `hd` explicitly still works.
 
 ### 2026-10-16 — enhancement 7 (hybrid mobile app) + pre-push review fixes
 

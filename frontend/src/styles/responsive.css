@@ -126,7 +126,8 @@
   .nav-btn,
   .faction-btn,
   .grade-tabs .tab,
-  .view-toggle .view-btn {
+  .view-toggle .view-btn,
+  .status-chip {
     min-height: 44px;
   }
 

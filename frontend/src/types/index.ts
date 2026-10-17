@@ -68,3 +68,16 @@ export interface ImportFreshness {
   overall: string | null;
   byShop: Record<ShopCode, string | null>;
 }
+
+// P-Bandai HK showcase item — mirrors backend PbandaiItem; never joins
+// price comparison.
+export interface PbandaiItem {
+  id: number;
+  name: string;
+  tcName: string | null;
+  price: number | null;
+  status: string | null;
+  url: string;
+  imageUrl: string | null;
+  importedAt: string;
+}

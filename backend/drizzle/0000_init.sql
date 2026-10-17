@@ -35,6 +35,20 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_grade ON products(grade);
 
+-- P-Bandai HK showcase snapshot: not part of price comparison. Each import
+-- replaces the whole table (no JAN/SKU identity to upsert against), so id
+-- order preserves the site's NewArrival ordering.
+CREATE TABLE IF NOT EXISTS pbandai_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  tc_name TEXT,
+  price REAL,
+  status TEXT,
+  url TEXT NOT NULL UNIQUE,
+  image_url TEXT,
+  imported_at TEXT NOT NULL
+);
+
 INSERT OR IGNORE INTO shops (code, name) VALUES
   ('hobbyland', 'Hobbyland'),
   ('animes-pro', 'Animes-Pro'),
