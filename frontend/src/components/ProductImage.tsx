@@ -18,6 +18,10 @@ export function ProductImage({ row, className }: Props) {
         className={`product-thumb ${className}`}
         src={imageUrl}
         alt=""
+        // Every usage renders square (table 88px/60px, gallery 1:1); declaring
+        // the size lets the browser reserve the box before the image loads.
+        width={88}
+        height={88}
         loading="lazy"
         referrerPolicy="no-referrer"
         onError={() => setFailedSrc(imageUrl)}

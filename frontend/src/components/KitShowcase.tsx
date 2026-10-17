@@ -27,6 +27,9 @@ function ShowcaseItem({ kit, isClone, onImageError }: ItemProps) {
         <img
           src={kit.imageUrl}
           alt=""
+          // Matches the square .showcase-link box (132px, 156px on >=720px).
+          width={132}
+          height={132}
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => onImageError(kit.key)}

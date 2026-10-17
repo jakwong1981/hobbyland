@@ -3,6 +3,7 @@ import { memo, type CSSProperties } from 'react';
 import type { ComparisonRow, ShopCode } from '../types';
 import { SHOP_LABEL, SHOP_TONE, DASHBOARD_SHOPS } from '../shops';
 import { seriesLabel } from '../series';
+import { useProgressiveRows } from '../hooks/useProgressiveRows';
 import { CheaperBadge } from './CheaperBadge';
 import { GradeEmblem } from './GradeEmblem';
 import { ProductImage } from './ProductImage';
@@ -59,14 +60,20 @@ const GalleryCard = memo(function GalleryCard({ row, index }: { row: ComparisonR
 });
 
 export function ComparisonGallery({ rows }: { rows: ComparisonRow[] }) {
+  const { shown, sentinelRef, hasMore, remaining } = useProgressiveRows(rows);
+
   if (rows.length === 0) {
     return <p className="empty-state">冇資料 — 請先匯入 CSV。</p>;
   }
   return (
-    <div className="gallery-grid">
-      {rows.map((row, index) => (
-        <GalleryCard key={`${row.grade}-${row.sku}`} row={row} index={index} />
-      ))}
-    </div>
+    <>
+      <div className="gallery-grid">
+        {shown.map((row, index) => (
+          <GalleryCard key={`${row.grade}-${row.sku}`} row={row} index={index} />
+        ))}
+      </div>
+      <div ref={sentinelRef} aria-hidden="true" />
+      {hasMore && <p className="status">下拉載入其餘 {remaining} 個 SKU…</p>}
+    </>
   );
 }

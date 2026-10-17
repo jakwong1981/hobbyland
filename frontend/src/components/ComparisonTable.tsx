@@ -10,6 +10,7 @@ import {
 import { SHOP_LABEL, SHOP_TONE, DASHBOARD_SHOPS } from '../shops';
 import { seriesLabel } from '../series';
 import { useComparisonSort } from '../hooks/useComparisonSort';
+import { useProgressiveRows } from '../hooks/useProgressiveRows';
 import { CheaperBadge } from './CheaperBadge';
 import { ProductImage } from './ProductImage';
 import { ShopLogo } from './ShopLogo';
@@ -105,6 +106,7 @@ function TitleCell({ row }: { row: ComparisonRow }) {
 
 export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
   const { sorted, sort, toggleSort } = useComparisonSort(rows);
+  const { shown, sentinelRef, hasMore, remaining } = useProgressiveRows(sorted);
 
   if (rows.length === 0) {
     return <p className="empty-state">冇資料 — 請先匯入 CSV。</p>;
@@ -138,7 +140,7 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row, index) => (
+          {shown.map((row, index) => (
             <tr
               key={`${row.grade}-${row.sku}`}
               style={{ '--i': Math.min(index, STAGGER_CAP) } as CSSProperties}
@@ -151,6 +153,8 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
           ))}
         </tbody>
       </table>
+      <div ref={sentinelRef} aria-hidden="true" />
+      {hasMore && <p className="status">下拉載入其餘 {remaining} 個 SKU…</p>}
     </div>
   );
 }
