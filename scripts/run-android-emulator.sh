@@ -10,6 +10,11 @@
 #             Default: https://localhost:8089 (forwarded to the Mac via `adb reverse`,
 #             so the hostname matches the self-signed cert in certs/).
 #   SKIP_WEB  Set to 1 to skip rebuilding the frontend bundle.
+#   EMULATOR_GPU
+#             GPU renderer passed via `-gpu`. Default: swiftshader_indirect (software).
+#             `-gpu host` renders fine guest-side but presents a black window on
+#             macOS 26 + emulator 37.1.11 (gfxstream host presentation broken),
+#             so software rendering is the stable default for now.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -48,7 +53,7 @@ APK="${ROOT_DIR}/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
 
 if ! "${ADB}" devices | grep -q "emulator-.*device$"; then
   echo "==> Booting emulator: ${AVD}"
-  nohup "${EMULATOR}" -avd "${AVD}" -netdelay none -netspeed full >/tmp/android-emulator.log 2>&1 &
+  nohup "${EMULATOR}" -avd "${AVD}" -gpu "${EMULATOR_GPU:-swiftshader_indirect}" -netdelay none -netspeed full >/tmp/android-emulator.log 2>&1 &
 fi
 
 echo "==> Waiting for emulator to finish booting"
