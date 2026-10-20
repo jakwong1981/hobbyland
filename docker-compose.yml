@@ -32,8 +32,19 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      # Lets this caddy reach the hk-live-dashboard app container
+      # (board.jackstudio.app → hk-weather-app:59001).
+      - shared-proxy
     restart: unless-stopped
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  shared-proxy:
+    # created once on the host: docker network create shared-proxy
+    external: true
+    name: ${EXTERNAL_PROXY_NET:-shared-proxy}

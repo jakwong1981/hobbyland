@@ -6,3 +6,14 @@ jackstudio.app {
 	}
 	encode zstd gzip
 }
+
+board.jackstudio.app {
+	# hk-live-dashboard's app container (own compose stack), reached over the
+	# shared docker network; it serves its own self-signed TLS on 59001.
+	reverse_proxy https://hk-weather-app:59001 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+	encode zstd gzip
+}
