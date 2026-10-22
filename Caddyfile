@@ -17,3 +17,14 @@ board.jackstudio.app {
 	}
 	encode zstd gzip
 }
+
+bill.jackstudio.app {
+	# bill-tracker's frontend nginx (own compose stack), reached over the
+	# shared docker network; it serves its own self-signed TLS on 60001.
+	reverse_proxy https://bill-tracker-frontend:60001 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+	encode zstd gzip
+}
